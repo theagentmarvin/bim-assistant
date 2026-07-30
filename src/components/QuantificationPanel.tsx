@@ -12,10 +12,19 @@
 // so users can dynamically add columns from `data.available_properties`
 // without re-querying.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { buildTSV, buildCSV, copyToClipboard, type Row as DataRow } from "../utils/copy";
 import type { QuantificationTable } from "../quantification/types";
 import styles from "./QuantificationPanel.module.css";
+
+// Boss #14917 (follow-up): per-column resize handles. With
+// table-layout: fixed, every column gets an explicit width and the
+// "nombre" column stops eating the table. Widths persist in
+// localStorage so the user's layout survives a reload.
+const DEFAULT_COL_WIDTH = 160;
+const MIN_COL_WIDTH = 60;
+const MAX_COL_WIDTH = 600;
+const COL_WIDTHS_STORAGE_KEY = "bim-assistant:quantification:colwidths";
 
 interface Props {
   data: QuantificationTable | null;
@@ -41,6 +50,77 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
   // selection. Persisted across filter/sort (recomputed with rows).
   const [extraColumns, setExtraColumns] = useState<string[]>([]);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
+  // Boss #14917 (follow-up): per-column widths. Keyed by column name.
+  // Missing or invalid keys fall back to DEFAULT_COL_WIDTH.
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const dragStateRef = useRef<{ col: string; startX: number; startWidth: number } | null>(null);
+
+  // Load persisted widths from localStorage. Failures (corrupted
+  // JSON, storage disabled) are silently swallowed — the user keeps
+  // working with defaults.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COL_WIDTHS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      const cleaned: Record<string, number> = {};
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof v === "number" && v >= MIN_COL_WIDTH && v <= MAX_COL_WIDTH) {
+          cleaned[k] = v;
+        }
+      }
+      setColWidths(cleaned);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Persist on change. Skip the initial empty state so we don't
+  // overwrite a stored value with `{}` on the first render.
+  useEffect(() => {
+    if (Object.keys(colWidths).length === 0) return;
+    try {
+      window.localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(colWidths));
+    } catch {
+      // ignore
+    }
+  }, [colWidths]);
+
+  const getColumnWidth = (col: string): number => {
+    const w = colWidths[col];
+    if (typeof w === "number" && w >= MIN_COL_WIDTH && w <= MAX_COL_WIDTH) return w;
+    return DEFAULT_COL_WIDTH;
+  };
+
+  const startResize = (col: string, e: React.MouseEvent) => {
+    // Prevent the click from also bubbling up to the sort button.
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = getColumnWidth(col);
+    dragStateRef.current = { col, startX, startWidth };
+
+    const onMove = (ev: MouseEvent) => {
+      const state = dragStateRef.current;
+      if (!state) return;
+      const delta = ev.clientX - state.startX;
+      const newWidth = Math.max(
+        MIN_COL_WIDTH,
+        Math.min(MAX_COL_WIDTH, state.startWidth + delta),
+      );
+      setColWidths((prev) => ({ ...prev, [state.col]: newWidth }));
+    };
+
+    const onUp = () => {
+      dragStateRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   // All columns currently displayed: agent's choice + user extras.
   // The agent's columns stay fixed (you can't remove them — that
@@ -170,6 +250,7 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
                     aria-sort={ariaSortFor(c)}
                     className={styles.th}
                     data-extra={isExtra ? "true" : undefined}
+                    style={{ width: getColumnWidth(c) }}
                   >
                     <button
                       type="button"
@@ -196,6 +277,14 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
                         ×
                       </button>
                     )}
+                    <div
+                      className={styles.resizeHandle}
+                      onMouseDown={(e) => startResize(c, e)}
+                      role="separator"
+                      aria-label={`Redimensionar columna ${c}`}
+                      aria-orientation="vertical"
+                      title="Arrastrar para ajustar ancho"
+                    />
                   </th>
                 );
               })}
@@ -235,7 +324,7 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
                   }
                 >
                   {allColumns.map((c) => (
-                    <td key={c} className={styles.td} data-col={c}>
+                    <td key={c} className={styles.td} data-col={c} style={{ width: getColumnWidth(c) }}>
                       {formatCell(row[c])}
                     </td>
                   ))}

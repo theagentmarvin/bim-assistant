@@ -78,6 +78,10 @@
 .table {
   width: 100%;
   border-collapse: collapse;
+  /* Boss #14917 (follow-up): table-layout: fixed honours the explicit
+   * `width` we set on each <th>. Without this, the browser auto-sizes
+   * columns based on content and the "nombre" column takes everything. */
+  table-layout: fixed;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -92,6 +96,32 @@
   color: var(--ff-text-primary);
   padding: 0;
   z-index: 1;
+  /* Anchor for the absolute-positioned resize handle. sticky already
+   * establishes a positioning context, but be explicit. */
+  position: sticky;
+}
+
+/* Boss #14917 (follow-up): drag handle on the right edge of each
+ * header cell. 6px wide, centered on the column boundary so it's
+ * easy to grab from either side. */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 2;
+  background: transparent;
+  transition: background 120ms ease;
+  touch-action: none;
+}
+
+.resizeHandle:hover,
+.resizeHandle:active {
+  background: var(--ff-blue-active);
+  opacity: 0.5;
 }
 
 .sortBtn {
@@ -209,18 +239,13 @@
   padding: 6px 12px;
   border-bottom: 1px solid var(--ff-divider);
   color: var(--ff-text-primary);
-  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Boss #14917: narrower first column ("Nombre") by default — was 320px
- * which made the rest of the table hard to see. Cap explicitly so the
- * user can see multiple columns side-by-side. */
-.td:first-child,
-.th:first-child {
-  max-width: 220px;
+  /* Boss #14917 (follow-up): with table-layout: fixed the explicit
+   * width on each <th> drives the column. The td doesn't need a
+   * max-width cap — content that overflows the cell gets clipped with
+   * ellipsis thanks to the three rules above. */
 }
 
 .emptyCell {

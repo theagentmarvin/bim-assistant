@@ -329,6 +329,19 @@ export default function App() {
             onReset={handleReset}
           />
         </aside>
+        <section className={styles.pdfSlot}>
+          <PdfViewer
+            pdfUrl="/eett-c.pdf"
+            currentPage={pdfPage}
+            onPageChange={setPdfPage}
+            onClickSection={(id) => {
+              setPdfSectionId(id);
+              const page = sectionIdToPageHeuristic(id);
+              setPdfPage(page);
+            }}
+            selectedSectionId={pdfSectionId}
+          />
+        </section>
         <section className={styles.center}>
           <ViewerPane
             mapping={agentMapping}
@@ -342,21 +355,7 @@ export default function App() {
               setSelectedElement(null);
               setResetTrigger((k) => k + 1);
             }}
-            selectedElement={selectedElement}
           />
-          <div className={styles.pdfSlot}>
-            <PdfViewer
-              pdfUrl="/eett-c.pdf"
-              currentPage={pdfPage}
-              onPageChange={setPdfPage}
-              onClickSection={(id) => {
-                setPdfSectionId(id);
-                const page = sectionIdToPageHeuristic(id);
-                setPdfPage(page);
-              }}
-              selectedSectionId={pdfSectionId}
-            />
-          </div>
         </section>
         <aside className={styles.right}>
           <ModelPropertyPanel data={selectedElement} />

@@ -1,6 +1,8 @@
-/* ViewerPane.module.css — toolbar on top, then a flex row with the 3D canvas
- * on the left and a resizable, collapsible properties panel docked on the
- * right. The drag handle lives between the canvas and the panel. */
+/* ViewerPane.module.css — slim toolbar + canvas only. Properties
+ * panel moved to the App-level right rail; PDF viewer lives in its
+ * own column. Both removed from this wrapper to keep the split-view
+ * single-purpose.
+ */
 
 .pane {
   display: flex;
@@ -68,150 +70,9 @@
   transform: translateY(1px);
 }
 
-/* Collapse toggle — sits in the toolbar, hides/shows the properties panel. */
-
-.toolbarCollapseBtn {
-  font-family: var(--ff-font-stack);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ff-text-muted);
-  background: var(--ff-bg-app);
-  border: 1px solid var(--ff-border);
-  border-radius: var(--ff-radius-control);
-  width: 24px;
-  height: 22px;
-  padding: 0;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
-}
-
-.toolbarCollapseBtn:hover {
-  background: var(--ff-blue-active);
-  color: #fff;
-  border-color: var(--ff-blue-active);
-}
-
-.toolbarCollapseBtn:active {
-  transform: translateY(1px);
-}
-
-/* Flex row that holds the canvas + resize handle + properties panel. */
-
-.body {
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .canvas {
   flex: 1;
   min-width: 0;
   position: relative;
   overflow: hidden;
-}
-
-/* Vertical drag handle between canvas and properties panel. */
-
-.resizeHandle {
-  flex-shrink: 0;
-  width: 6px;
-  cursor: col-resize;
-  background: var(--ff-border);
-  position: relative;
-  transition: background 120ms ease;
-  touch-action: none;
-}
-
-.resizeHandle::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: transparent;
-}
-
-.resizeHandle:hover,
-.resizeHandle:active {
-  background: var(--ff-blue-active);
-}
-
-.resizeHandle:hover::after,
-.resizeHandle:active::after {
-  /* Subtle grip dots on hover for discoverability. */
-  background:
-    radial-gradient(circle, var(--ff-text-muted) 1px, transparent 1.5px) center / 2px 12px repeat-y;
-}
-
-.propertiesContainer {
-  flex-shrink: 0;
-  width: 288px;
-  border-left: 1px solid var(--ff-border);
-  overflow: hidden;
-  background: var(--ff-bg-panel);
-  transition: width 120ms ease;
-}
-
-/* When collapsed, the panel width is driven inline (width: 0). The right-edge
- * collapsedStrip then anchors a small "expand" affordance against the canvas. */
-
-.collapsedStrip {
-  flex-shrink: 0;
-  width: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--ff-bg-panel);
-  border-left: 1px solid var(--ff-border);
-}
-
-.collapsedExpandBtn {
-  font-family: var(--ff-font-stack);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--ff-text-muted);
-  background: var(--ff-bg-app);
-  border: 1px solid var(--ff-border);
-  border-radius: var(--ff-radius-control);
-  width: 22px;
-  height: 36px;
-  padding: 0;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
-}
-
-.collapsedExpandBtn:hover {
-  background: var(--ff-blue-active);
-  color: #fff;
-  border-color: var(--ff-blue-active);
-}
-
-.placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--ff-text-muted);
-  gap: 12px;
-  font-size: 13px;
-}
-
-.placeholderIcon {
-  font-size: 48px;
-  opacity: 0.3;
-}
-
-.placeholderTitle {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ff-text-secondary);
 }

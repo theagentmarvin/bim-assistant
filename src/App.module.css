@@ -59,9 +59,18 @@
   border: 1px solid var(--ff-border);
 }
 
+/* Split-view shell (vertical dividers, 4 columns):
+ *   [ChatPanel] [PdfViewer] [ViewerPane (3D)] [ModelPropertyPanel]
+ * Columns use minmax() so on narrow screens the viewer still claims
+ * the remainder instead of getting squeezed to zero.
+ */
 .body {
   display: grid;
-  grid-template-columns: minmax(320px, 360px) 1fr minmax(260px, 320px);
+  grid-template-columns:
+    minmax(300px, 340px)
+    minmax(360px, 420px)
+    minmax(420px, 1fr)
+    minmax(260px, 320px);
   min-height: 0;
   height: 100%;
 }
@@ -71,23 +80,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.center {
-  min-width: 0;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: 1fr 1fr;
-  gap: 1px;
-  background: var(--ff-border);
-}
-
-.right {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--ff-border);
+  border-right: 1px solid var(--ff-border);
 }
 
 .pdfSlot {
@@ -96,4 +89,21 @@
   display: flex;
   flex-direction: column;
   background: var(--ff-bg-app);
+  border-right: 1px solid var(--ff-border);
+}
+
+.center {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ff-bg-canvas);
+}
+
+.right {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--ff-border);
 }

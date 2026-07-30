@@ -17,6 +17,8 @@ import ChatPanel, {
   summarizeToolResult,
 } from "./components/ChatPanel";
 import ModelPropertyPanel from "./components/ModelPropertyPanel";
+import RightPaneTabs, { type RightPaneTabId } from "./components/RightPaneTabs";
+import QuantificationPanel from "./components/QuantificationPanel";
 import { loadMappings } from "./data/mappings";
 import type { ElementClickData, ElementProperties } from "./viewer/Viewer3D";
 import { runAgentLoop } from "./agent/loop";
@@ -31,6 +33,7 @@ import type {
   AbrirPdfCallback,
 } from "./agent/tools";
 import { countByClass } from "./agent/tools";
+import type { QuantificationTable } from "./quantification/types";
 import type { Filter } from "./types";
 import styles from "./App.module.css";
 
@@ -55,6 +58,13 @@ export default function App() {
   const [agentFilter, setAgentFilter] = useState<Filter | null>(null);
   const [resetTrigger, setResetTrigger] = useState(0);
   const [selectedElement, setSelectedElement] = useState<ElementProperties | null>(null);
+  // ----- Right pane (Spec PDF | Cuantificación) -----
+  // Active tab id. Auto-switches to "cuantificacion" when the agent
+  // returns a `tabla`; sticky after (user can flip back manually).
+  const [rightPaneTab, setRightPaneTab] = useState<RightPaneTabId>("pdf");
+  // Latest structured table from the agent. Renders inside the
+  // Cuantificación tab. Replaced on each new arrival.
+  const [latestTable, setLatestTable] = useState<QuantificationTable | null>(null);
 
   // ----- PDF viewer state -----
   const [pdfPage, setPdfPage] = useState(1);
@@ -191,6 +201,31 @@ export default function App() {
     [resaltar, abrirPdf],
   );
 
+  // ----- Row click in Cuantificación tab → viewer highlight -----
+  // When the user clicks a row in the quantification table, build a
+  // Filter that matches the row's express_ids and route it through
+  // the existing agentFilter pipeline (App → ViewerPane → Viewer3D).
+  // For grouping rows this fans out to every element in the bucket.
+  const handleRowSelect = useCallback((ids: number[]) => {
+    if (ids.length === 0) return;
+    const filter: Filter = {
+      c: "AND",
+      g: [
+        {
+          c: "OR",
+          r: ids.map((id) => ({
+            p: "express_id",
+            op: "equals",
+            v: String(id),
+          })),
+        },
+      ],
+    };
+    setAgentMappingId(null);
+    setAgentIfcClass(null);
+    setAgentFilter(filter);
+  }, []);
+
   // ----- Send handler -----
 
   const handleSend = useCallback(async (text: string) => {
@@ -225,6 +260,17 @@ export default function App() {
             copy[realIdx] = { ...target, toolResult: { ok: result.ok, summary } };
             return copy;
           });
+          // Lift the structured `tabla` payload into the right-pane
+          // state and auto-switch the active tab. The chat bubble
+          // already shows the prose summary; the table is the
+          // canonical view.
+          if (result.ok && result.tool === "consultar_base_de_conocimiento") {
+            const t = result.result.tabla;
+            if (t) {
+              setLatestTable(t);
+              setRightPaneTab("cuantificacion");
+            }
+          }
         },
         onFinalAnswer: (text) => {
           append({ id: newMessageId(), role: "agent", text });
@@ -260,6 +306,9 @@ export default function App() {
     setSelectedElement(null);
     setPdfPage(1);
     setPdfSectionId(null);
+    // Clear the Cuantificación tab so the next query starts fresh.
+    setLatestTable(null);
+    setRightPaneTab("pdf");
   }, []);
 
   // ----- 3D element click -----
@@ -348,16 +397,28 @@ export default function App() {
           />
         </aside>
         <section className={styles.pdfSlot}>
-          <PdfViewer
-            pdfUrl="/eett-c.pdf"
-            currentPage={pdfPage}
-            onPageChange={setPdfPage}
-            onClickSection={(id) => {
-              setPdfSectionId(id);
-              const page = sectionIdToPageHeuristic(id);
-              setPdfPage(page);
-            }}
-            selectedSectionId={pdfSectionId}
+          <RightPaneTabs
+            tab={rightPaneTab}
+            onTabChange={setRightPaneTab}
+            pdf={
+              <PdfViewer
+                pdfUrl="/eett-c.pdf"
+                currentPage={pdfPage}
+                onPageChange={setPdfPage}
+                onClickSection={(id) => {
+                  setPdfSectionId(id);
+                  const page = sectionIdToPageHeuristic(id);
+                  setPdfPage(page);
+                }}
+                selectedSectionId={pdfSectionId}
+              />
+            }
+            cuantificacion={
+              <QuantificationPanel
+                data={latestTable}
+                onRowSelect={handleRowSelect}
+              />
+            }
           />
         </section>
         <section className={styles.center}>

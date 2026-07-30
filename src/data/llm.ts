@@ -14,13 +14,16 @@ import type { ToolSchema } from "../agent/schema";
 
 const GEMINI_BASE_URL =
   "https://generativelanguage.googleapis.com/v1beta/models";
-// Gemini Flash is the locked model for PoC. We use the rolling alias
-// `gemini-flash-latest` because `gemini-2.5-flash` is retired for new
-// accounts (404 "no longer available to new users") — verified via
-// ListModels on 2026-07-30 with Boss's key. Fallback in priority
-// order: `gemini-3.1-flash-lite`, `gemini-2.0-flash`. The agent loop
-// is model-agnostic as long as function-calling shape is preserved.
-const GEMINI_MODEL = "gemini-flash-latest";
+// Gemini Flash is the locked model for PoC. We use `gemini-3.1-flash-lite`
+// because `gemini-flash-latest` aliases to `gemini-3.6-flash` which has a
+// 20-req/day free-tier quota that exhausts quickly under dev/QA testing.
+// Verified 2026-07-30 with Boss's AQ. token: gemini-flash-latest → 429
+// (RESOURCE_EXHAUSTED, gemini-3.6-flash free-tier), gemini-3.1-flash-lite
+// → 200 OK with a fresh quota bucket. Fallback chain (priority order):
+// gemini-flash-latest (if quota resets), gemini-3.5-flash (503 observed
+// under load). The agent loop is model-agnostic as long as the
+// function-calling shape is preserved.
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 const FIREWORKS_EMBED_URL =
   "https://api.fireworks.ai/inference/v1/embeddings";

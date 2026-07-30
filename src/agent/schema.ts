@@ -63,6 +63,31 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
           description:
             "De dónde obtener la respuesta. 'auto' decide según la pregunta (default).",
         },
+        tabla: {
+          type: "object",
+          description:
+            "OPCIONAL. Solicita una tabla estructurada en la pestaña Cuantificación. Úsalo cuando el usuario pida listados, conteos por grupo, o desglose por propiedad. Omite el campo para obtener solo prosa.",
+          properties: {
+            clase_ifc: {
+              type: "string",
+              description: "Clase IFC para filtrar (ej: 'IfcWall').",
+            },
+            columnas: {
+              type: "array",
+              description: "Columnas a mostrar. Etiquetas en español que el tool resuelve a sus claves top-level (ej: 'Nombre' → name, 'Material' → material_name). NO listes propiedades que no existen en la clase.",
+              items: { type: "string", description: "Etiqueta de columna en español." },
+            },
+            agrupar_por: {
+              type: "array",
+              description: "Cuando se pide conteo agrupado (ej: 'por planta', 'por material'), pasa las claves aquí. El tool emite una fila por grupo con columna Cantidad.",
+              items: { type: "string", description: "Clave top-level de la propiedad para agrupar." },
+            },
+            titulo: {
+              type: "string",
+              description: "Título en español para la cabecera de la tabla.",
+            },
+          },
+        },
       },
       required: ["pregunta"],
     },

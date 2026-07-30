@@ -1,6 +1,10 @@
-// Viewer3D.tsx — v6
-// Isolation: OBC.Hider (Free Field pattern — set(true,matching) + set(false,nonMatching))
-// Click-to-select: OBCF.Highlighter. Properties: onElementData callback.
+// Viewer3D.tsx — v7
+// Filter highlight: OBCF.Highlighter 'filter' style (yellow, 0.35). All
+//   elements stay visible; matching ones get a soft tint. The Hider
+//   hide-non-matching pattern is gone (Boss 2026-07-30 17:14) — see
+//   FILTER_MAT below.
+// Click-to-select: OBCF.Highlighter 'select' style (orange, 0.6).
+//   White space click → clear('select'). Properties: onElementData callback.
 
 import React, { useEffect, useRef, useState } from "react";
 import * as OBC from "@thatopen/components";
@@ -33,6 +37,22 @@ const IFC_URL = "/SZA_BDE3_ARQ_C1.ifc";
 const SELECT_MAT: FRAGS.MaterialDefinition = {
   color: new THREE.Color(0xff6a00),
   opacity: 0.6,
+  transparent: true,
+  renderedFaces: FRAGS.RenderedFaces.TWO,
+  preserveOriginalMaterial: true,
+  _explicitProps: ["color", "opacity", "transparent"],
+};
+
+// FILTER_MAT for the Highlighter 'filter' style. Used by the isolation
+// effect to highlight (not hide) elements that match the active agent
+// filter / mapping / IFC class. Subtle yellow at 0.35 opacity so the
+// SELECT_MAT (orange, 0.6) reads as the dominant highlight when an
+// element is both filtered AND selected — the Highlighter's "select
+// takes precedence over custom" rule applies here. (TOE Highlighter
+// example.ts, "select overrides custom until deselected".)
+const FILTER_MAT: FRAGS.MaterialDefinition = {
+  color: new THREE.Color(0xffeb3b),
+  opacity: 0.35,
   transparent: true,
   renderedFaces: FRAGS.RenderedFaces.TWO,
   preserveOriginalMaterial: true,
@@ -82,16 +102,16 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
   const fragsR = useRef<OBC.FragmentsManager | null>(null);
   const worldR = useRef<OBC.World | null>(null);
   const hlR = useRef<OBCF.Highlighter | null>(null);
-  const hiderR = useRef<OBC.Hider | null>(null);
   const disR = useRef(false);
   const loadedR = useRef(false);
   const itemsR = useRef<ItemsMap | null>(null);
-  // Set of localIds that should be pickable right now — i.e. the "pink"
-  // (non-ghosted) elements under the current isolation. Updated by the
-  // isolation effect, read by the highlighter click handler so ghosted
-  // (non-matching) elements are ignored on click. Null when isolation
-  // is not active (treat as "all pickable").
-  const matchingSetR = useRef<Set<number> | null>(null);
+  // Boss follow-up (2026-07-30 17:14): the Hider-based isolation
+  // (hide non-matching) was the wrong ergonomics — users expected
+  // standard viewer behavior where the model stays fully visible
+  // and matching elements get a soft highlight. The Hider is gone,
+  // the matchingSetR ref is gone, and the Highlighter now owns both
+  // 'select' (orange, the click-highlight) and 'filter' (yellow, the
+  // agent-driven pre-highlight) — see FILTER_MAT above.
 
   const [status, setStatus] = useState("Initializing…");
   const [loaded, setLoaded] = useState(false);
@@ -132,22 +152,28 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
         w.scene.three.add(model.object); void frags.core.update(true);
       });
 
-      // Pre-warm raycaster + register Hider (Free Field pattern: lazy init)
+      // Pre-warm raycaster (Hider is gone — see FILTER_MAT comment)
       c.get(OBC.Raycasters).get(w);
-      hiderR.current = c.get(OBC.Hider);
 
       if (w.renderer) {
         const hl = c.get(OBCF.Highlighter);
         hl.setup({ world: w, selectMaterialDefinition: SELECT_MAT, autoHighlightOnClick: false });
-        hl.multiple = "none"; hlR.current = hl;
+        // hl.multiple stays at the default ("none") — single-select for
+        // the click-to-select style. The 'filter' custom style (below)
+        // is independent of this setting: highlightByID accepts a
+        // Map<modelId, Set<localId>> with any number of elements, so
+        // the filter highlight can color N matching elements without
+        // overriding the select style's single-element behavior.
+        hl.styles.set("filter", FILTER_MAT);
+        hlR.current = hl;
         hl.events.select.onHighlight.add(async (mids: Record<string, Set<number>>) => {
           if (stale() || disR.current) return;
           const [mid, ids] = Object.entries(mids)[0] ?? []; const id = ids?.values().next().value;
           if (mid == null || id == null) return;
-          // Filter ghosted (non-matching) elements when isolation is active.
-          // matchingSetR.current is null when isolation isn't active → no filter.
-          const matchingForClick = matchingSetR.current;
-          if (matchingForClick && !matchingForClick.has(id)) return;
+          // Note: the previous matchingSetR ghost-filter is gone — the
+          // pointerdown handler now allows clicks on any element
+          // (standard viewer behavior), so by the time we reach this
+          // handler the picked element is always a valid pick.
           const model = frags.list.get(mid); if (!model) return;
           const items = itemsR.current;
           if (!items) return; const item = items[id]; if (!item) return;
@@ -174,21 +200,19 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
               dataR.current?.({ modelId: mid, expressId: id, guid: (liveGuid ?? item.guid) as string | undefined, ifcClass: item.ifc_class ?? "?", name: item.name ?? "", properties: p });
             }
           } catch { /* */ }
-          // No ghost re-apply here: isolation is handled by OBC.Hider
-          // (visibility, not material), so re-running setOpacity/resetOpacity
-          // after a highlight tick is destructive — resetOpacity strips
-          // opacity/transparent from the SELECT_MAT and leaves the color
-          // override stranded (no _explicitProps → loop short-circuits in
-          // the materials manager → click highlight vanishes). The Hider is
-          // persistent across renders and survives highlightByID /
-          // updateColors() / frags.core.update(true) on its own.
+          // No ghost re-apply here. The 'filter' style (yellow) is a
+          // Highlighter-driven material override, not a setOpacity-based
+          // ghost — it's persistent across renders and survives
+          // highlightByID / updateColors() / frags.core.update(true) on
+          // its own. (The previous Hider comment about resetOpacity
+          // short-circuiting the SELECT_MAT no longer applies; the
+          // Hider is gone.)
         });
         // Per Boss directive 2026-07-26 20:10:39: onClear is intentionally
         // a no-op. Selection state is managed by:
         //   - the pointerdown handler's empty branch below (true deselect —
         //     emits setSelectedElement(null) explicitly when castRay
-        //     returns null AND when the matchingSetR filter rejects the
-        //     hit), AND
+        //     returns null), AND
         //   - the onHighlight handler above (valid pick — populates the
         //     panel via clickR.current + dataR.current).
         // Auto-emitting empty on every onClear was the source of the
@@ -203,22 +227,23 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
         //
         // Why we disabled autoHighlightOnClick (see hl.setup() above):
         //  * It synchronously applies SELECT_MAT on every click, including
-        //    ghosted (non-matching) elements. From the user's perspective
-        //    the ghost "picks" because it flashes orange.
+        //    on elements that aren't part of the current filter. The user
+        //    couldn't tell if the pick was "valid" — every click flashed
+        //    orange, even on a wall when they were inspecting windows.
         //  * The material change triggers an internal frags.core.update(true)
         //    which can rebuild the scene and reset the camera view.
         //  * Every new click also fires onClear → setSelectedElement(null),
-        //    wiping the property panel even when the new click is a ghost
-        //    that we want to ignore.
+        //    wiping the property panel even when the new click is on an
+        //    off-filter element.
         //
         // This handler owns the click loop instead. It runs the raycaster,
-        // iterates hits (already sorted by distance), and applies the
-        // matchingSet filter: ghosts are silently skipped; pass-through
-        // takes the first hit whose localId is in the matching set.
-        // Valid picks call hl.highlightByID(...) which still routes through
-        // the existing events.select.onHighlight handler — that flow (click
-        // event emission + properties fetch + RAF ghost re-apply) is
-        // unchanged and reused as-is.
+        // picks the frontmost hit, and applies SELECT_MAT via
+        // hl.highlightByID(..., removePrevious:true). On white space it
+        // calls clear('select') so the panel empties. The 'filter' style
+        // (yellow) is independent — clicks on any element work, filter
+        // is purely visual aid. The highlighter's "select takes precedence
+        // over custom" rule means a clicked element that's also in the
+        // filter shows orange over yellow until deselected.
         const onPointerDown = async (ev: PointerEvent) => {
           if (ev.button !== 0) return;                                  // left-click only
           if (disR.current || !loadedR.current) return;
@@ -274,20 +299,14 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
           const localId = hit.localId;
           if (!items[localId]) return;  // hit an element not in our items map
 
-          // Filter ghosted (non-matching) elements when isolation is active.
-          const matching = matchingSetR.current;
-          if (matching && !matching.has(localId)) {
-            // Ghost click — pass through silently. castRay returns the
-            // frontmost hit; if that's a ghost, we skip. Full pass-through
-            // to a backing pink element would require iterating Three.js
-            // hits in priority order, which OBC's castRay doesn't expose
-            // — but frontmost-hit is the typical UX for "click what you see".
-            return;
-          }
-
           // Valid pick — manually invoke the Highlighter's pick flow so the
-          // existing onHighlight handler runs (matchingSetR guard is now
-          // redundant but harmless — we already filtered here).
+          // existing onHighlight handler runs. The previous
+          // matchingSetR-ghost-filter branch is gone: standard viewer
+          // behavior is "click any element to select it", regardless of
+          // whether it's part of the active filter highlight. The user
+          // can still click an off-filter element and inspect its props
+          // — the filter highlight is purely a visual aid for the
+          // agent-driven query result.
           void hl.highlightByID(
             "select",
             { [MODEL_ID]: new Set([localId]) },
@@ -329,29 +348,39 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
       disR.current = true; loadedR.current = false; itemsR.current = null;
       pointerDownCleanup?.();
       const h = hlR.current; if (h) { void h.dispose().catch(() => {}); } hlR.current = null;
-      hiderR.current = null;
       try { c.dispose(); } catch { /* */ }
       compR.current = null; fragsR.current = null; worldR.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Isolation via OBC.Hider (Free Field pattern).
-  // Runs on section change. Uses refs (not state) to check if model is loaded.
+  // Filter-driven highlight via the Highlighter 'filter' style.
+  // Runs on section change (mapping), IFC class selection, or any
+  // chat-driven Filter (Navisworks shape from `src/agent/schema.ts`).
+  // Uses refs (not state) to check if model is loaded.
+  //
+  // Boss follow-up (2026-07-30 17:14): the prior implementation used
+  // OBC.Hider to *hide* non-matching elements. Users wanted the
+  // standard viewer behavior — model stays fully visible, matching
+  // elements get a soft yellow tint. The Hider is gone; this effect
+  // now tints matching elements via hl.highlightByID("filter", ...).
+  // Trade-off vs hide: nothing is hidden, so the user sees the whole
+  // model with matching elements standing out in yellow. The Hider
+  // primitives are preserved in commit history if we ever need to
+  // bring back the "focus only" mode.
   useEffect(() => {
     if (!loadedR.current) return;
     const frags = fragsR.current; if (!frags) return;
     const items = itemsR.current; if (!items) return;
-    const hider = hiderR.current; if (!hider) { console.warn("[V3D] isolation: no hider"); return; }
+    const hl = hlR.current; if (!hl) { console.warn("[V3D] isolation: no highlighter"); return; }
 
     const allIds = Object.keys(items).map(Number);
     const all = new Set(allIds);
 
-    // Get filter expressions. The chat-driven `agentFilter` (Navisworks
-    // shape from `src/agent/schema.ts`) takes precedence over the
-    // mapping when present — the chat is the primary surface in the
-    // PoC. Otherwise we fall back to the mapping's first result filter
-    // (existing path, unchanged). (RAG-for-IFC interaction step 1.)
+    // Get filter expressions. The chat-driven `agentFilter` takes
+    // precedence over the mapping when present — the chat is the
+    // primary surface in the PoC. Otherwise we fall back to the
+    // mapping's first result filter.
     const filters: Filter[] = agentFilter
       ? [agentFilter]
       : (mapping?.results ?? [])
@@ -375,10 +404,8 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
     } else {
       matching = new Set(all);
     }
-    // Publish to the click handler so ghosted (non-matching) elements can't be picked.
-    matchingSetR.current = matching;
 
-    console.log("[V3D] isolation:", {
+    console.log("[V3D] filter-highlight:", {
       matching: matching.size,
       total: all.size,
       linked,
@@ -388,67 +415,48 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
       agentFilter: agentFilter ? "(set)" : null,
     });
 
-    // Ghost non-matching elements (instead of hiding).
-    // Use setOpacity to keep original colors — only add transparency.
-    // Per Boss directive 2026-07-26 19:52: switch isolation mechanism
-    // from setOpacity (ghost — fragile, wiped by highlightByID /
-    // updateColors) to OBC.Hider (hide — visibility state is persistent
-    // across renders and survives updateColors()'s resetHighlight(ALL)
-    // and frags.core.update(true)).
-    //
-    // Trade-off vs setOpacity: hidden elements aren't visible at all
-    // (no silhouette context), but clicks pass through to whatever is
-    // actually showing, and the hide state isn't blown away on each
-    // highlight tick. Boss decided the fragility wasn't worth the
-    // silhouette — hide it is.
-    //
-    // The setOpacity / resetOpacity primitives are preserved in code as
-    // a commented toggle — flip the comments to re-enable visual
-    // ghosting if silhouette comes back as a requirement.
-
-    if ((hasFilter || selectedIfcClass) && matching.size < all.size) {
-      const nonMatchingIds = allIds.filter(id => !matching.has(id));
-      const matchingIds = [...matching];
-      const visibleMap = { [MODEL_ID]: new Set(matchingIds) };
-      const hiddenMap  = { [MODEL_ID]: new Set(nonMatchingIds) };
-      Promise.all([
-        hider.set(true,  visibleMap),
-        hider.set(false, hiddenMap),
-      ]).then(() => {
-        if (disR.current) return;
-        setStatus(`1 model · ${matching.size} matching / ${all.size} total`);
-      }).catch((e) => console.warn("[V3D] hide failed:", e));
-      // (GHOST METHODS — preserved as commented toggle.)
-      // const model = frags.list.get(MODEL_ID);
-      // if (model) {
-      //   Promise.all([
-      //     model.setOpacity(nonMatchingIds, 0.1),
-      //     model.resetOpacity(matchingIds),
-      //   ]).then(() => { ... }).catch(...);
-      // }
-    } else {
-      // No isolation active — show everything, clear any prior hides.
-      hider.set(true, { [MODEL_ID]: new Set(allIds) }).then(() => {
-        if (disR.current) return;
+    // Apply / clear the 'filter' highlight. Always clear first so a
+    // previous filter's matching set doesn't leak into the new one.
+    // Then, if there's a meaningful filter (matching < total), tint
+    // the matching elements. Note: highlightByID with removePrevious
+    // = false means we own the clearing path explicitly above.
+    if (hasFilter || selectedIfcClass) {
+      if (matching.size > 0 && matching.size < all.size) {
+        hl.clear("filter").catch(() => {});
+        hl.highlightByID(
+          "filter",
+          { [MODEL_ID]: new Set([...matching]) },
+          false,
+        ).then(() => {
+          if (disR.current) return;
+          setStatus(`1 model · ${matching.size} matching / ${all.size} total`);
+        }).catch((e) => console.warn("[V3D] filter highlight failed:", e));
+      } else {
+        // All elements match (or zero match) — nothing to highlight.
+        hl.clear("filter").catch(() => {});
         setStatus("1 model loaded");
-      }).catch((e) => console.warn("[V3D] reset hide failed:", e));
-      // (GHOST RESET) frags.list.get(MODEL_ID)?.resetOpacity(allIds).then(...);
+      }
+    } else {
+      // No filter active — clear filter highlight.
+      hl.clear("filter").catch(() => {});
+      setStatus("1 model loaded");
     }
   }, [selectedIfcClass, mapping, agentFilter, loaded]);
 
-  // Soft reset: bump resetTrigger to clear the 'select' highlight in the
-  // Highlighter WITHOUT remounting Viewer3D or reloading the IFC.
-  // Boss directive 2026-07-27 09:40 — reset view should remove filters
-  // and deselect the spec section, not dispose+reload the model.
-  // (The companion state in App.tsx clears selectedId + selectedElement
-  // in the same tick, so the isolation effect (above) runs with mapping=null
-  // and shows the whole model.)
+  // Soft reset: bump resetTrigger to clear BOTH highlighter styles.
+  // 'select' = the click highlight; 'filter' = the agent-filter
+  // pre-highlight. Both go away on a clean reset (e.g., the user
+  // clicks the ⟳ Reset view button or the chat issues a new query
+  // that resets the page state). Boss directive 2026-07-27 09:40 —
+  // reset view should remove filters and deselect the spec section,
+  // not dispose+reload the model.
   useEffect(() => {
     if (resetTrigger === undefined || resetTrigger === 0) return;
     if (!loadedR.current) return;
     const hl = hlR.current;
     if (!hl) return;
     void hl.clear("select").catch(() => {});
+    void hl.clear("filter").catch(() => {});
   }, [resetTrigger]);
 
   return (

@@ -42,6 +42,12 @@ export interface ConsultarResult {
   /** Optional structured table (populated when the agent asks for
    *  quantification + column list). Renders in the Cuantificación tab. */
   tabla?: QuantificationTable;
+  /** Boss 2026-07-30 18:13 — warnings about the agent's request.
+   *  Used to flag columns that have no data for the requested class
+   *  (e.g., "largo" for IfcWindow — length_m is null in the extract).
+   *  The agent uses these warnings to suggest alternatives to the
+   *  user from the table's available_properties field. */
+  warnings?: string[];
 }
 
 export interface ResaltarResult {
@@ -292,6 +298,27 @@ function defaultTitulo(spec: TablaSpec, count: number): string {
 }
 
 /**
+ * Boss 2026-07-30 18:13 — detect columns that resolved to "—" for
+ * every row. These are properties that either don't exist for the
+ * class (e.g., length_m for IfcWindow) or are null in the data.
+ * Returns the column names so the agent can suggest alternatives
+ * from the table's available_properties field.
+ */
+function detectEmptyColumns(
+  filas: Array<Record<string, string | number | boolean>>,
+  columnas: string[],
+): string[] {
+  if (filas.length === 0) return [];
+  const empty: string[] = [];
+  for (const col of columnas) {
+    if (filas.every((row) => row[col] === "—")) {
+      empty.push(col);
+    }
+  }
+  return empty;
+}
+
+/**
  * Build a structured `tabla` from bim_elements.json. Only sourced
  * from `modelo` corpus — spec/PDF rows don't carry structured
  * properties in this PoC.
@@ -405,12 +432,27 @@ export async function toolConsultarBaseDeConocimiento(
   const resolvedFuente: "modelo" | "especificacion" | "mapeos" =
     fuente === "auto" ? "modelo" : fuente;
   const tabla = args.tabla ? buildTabla(resolvedFuente, args.tabla) : undefined;
+  // Boss 2026-07-30 18:13 — detect columns that have no data for the
+  // requested class (e.g., "largo" for IfcWindow — length_m is null
+  // in the extract). The agent uses these warnings to suggest
+  // alternatives from available_properties.
+  const warnings: string[] = [];
+  if (tabla) {
+    const emptyCols = detectEmptyColumns(tabla.filas, tabla.columnas);
+    for (const col of emptyCols) {
+      warnings.push(
+        `La columna "${col}" no tiene datos para la clase solicitada. ` +
+        `Sugiere al usuario columnas alternativas del campo available_properties.`,
+      );
+    }
+  }
   return {
     respuesta:
       respuesta || "No se encontraron fragmentos relevantes para esta pregunta.",
     citas,
     hits: top,
     tabla,
+    warnings: warnings.length > 0 ? warnings : undefined,
   };
 }
 

@@ -30,6 +30,8 @@ import type {
   ResaltarCallback,
   AbrirPdfCallback,
 } from "./agent/tools";
+import { countByClass } from "./agent/tools";
+import type { Filter } from "./types";
 import styles from "./App.module.css";
 
 const MODEL_ID_DEFAULT_IFC_CLASS: string | null = null;
@@ -45,6 +47,12 @@ export default function App() {
   // chat takes priority.
   const [agentMappingId, setAgentMappingId] = useState<string | null>(null);
   const [agentIfcClass, setAgentIfcClass] = useState<string | null>(MODEL_ID_DEFAULT_IFC_CLASS);
+  // Chat-driven Filter (Navisworks-style) — takes precedence over
+  // mapping. Set by the agent when it calls
+  // `resaltar_elementos({ filtro })`; cleared by reset / clase_ifc /
+  // seccion_id so the viewer doesn't carry stale filter state across
+  // calls. (RAG-for-IFC interaction step 1.)
+  const [agentFilter, setAgentFilter] = useState<Filter | null>(null);
   const [resetTrigger, setResetTrigger] = useState(0);
   const [selectedElement, setSelectedElement] = useState<ElementProperties | null>(null);
 
@@ -77,6 +85,7 @@ export default function App() {
     if (args.reset) {
       setAgentIfcClass(null);
       setAgentMappingId(null);
+      setAgentFilter(null);
       setResetTrigger((k) => k + 1);
       return {
         matching: 0,
@@ -87,41 +96,49 @@ export default function App() {
       };
     }
     if (args.seccion_id) {
+      setAgentFilter(null);
       setAgentIfcClass(null);
       setAgentMappingId(args.seccion_id);
       const m = mappings.find((mm) => mm.section_id === args.seccion_id);
       const top = m?.results?.[0];
       const criterio = `sección ${args.seccion_id}` + (top ? ` → ${top.ifc_class}` : "");
+      const matching = top?.ifc_class ? countByClass(top.ifc_class) : 0;
       return {
-        matching: 0, // computed by Viewer3D after isolation runs
-        total: 0,
+        matching,
+        total: matching,
         ids: [],
         accion: "resaltado",
         criterio,
       };
     }
     if (args.clase_ifc) {
+      setAgentFilter(null);
       setAgentMappingId(null);
       setAgentIfcClass(args.clase_ifc);
+      const matching = countByClass(args.clase_ifc);
       return {
-        matching: 0,
-        total: 0,
+        matching,
+        total: matching,
         ids: [],
         accion: "resaltado",
         criterio: `clase IFC ${args.clase_ifc}`,
       };
     }
-    // filtro object — best-effort: extract the IFC class hint if any.
-    const filterClass = (args.filtro as { _ifcClass?: string } | undefined)?._ifcClass ?? null;
-    if (filterClass) {
+    // filtro (Navisworks-style) — plumbed through to Viewer3D via
+    // agentFilter. The viewer evaluates against fragment items and
+    // exposes the actual matching count via the existing isolation
+    // effect; this return value is best-effort because the agent
+    // doesn't have access to the live item array.
+    if (args.filtro) {
       setAgentMappingId(null);
-      setAgentIfcClass(filterClass);
+      setAgentIfcClass(null);
+      setAgentFilter(args.filtro);
       return {
         matching: 0,
         total: 0,
         ids: [],
         accion: "resaltado",
-        criterio: `filtro (${filterClass})`,
+        criterio: "filtro del agente",
       };
     }
     return {
@@ -238,6 +255,7 @@ export default function App() {
     setMessages([]);
     setAgentIfcClass(null);
     setAgentMappingId(null);
+    setAgentFilter(null);
     setResetTrigger((k) => k + 1);
     setSelectedElement(null);
     setPdfPage(1);
@@ -346,12 +364,14 @@ export default function App() {
           <ViewerPane
             mapping={agentMapping}
             selectedIfcClass={agentIfcClass}
+            agentFilter={agentFilter}
             onElementClick={handleElementClick}
             onElementData={handleElementData}
             resetTrigger={resetTrigger}
             onResetViewer={() => {
               setAgentMappingId(null);
               setAgentIfcClass(null);
+              setAgentFilter(null);
               setSelectedElement(null);
               setResetTrigger((k) => k + 1);
             }}

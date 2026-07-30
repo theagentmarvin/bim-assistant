@@ -34,7 +34,7 @@ export type IndexProgressCallback = (e: IndexProgressEvent) => void;
 
 const META_HASH_KEY = "index.hash.v1";
 const META_TS_KEY = "index.timestamp.v1";
-const META_VERSION = "1";
+const META_VERSION = "2"; // bump when chunk shape changes (e.g. flat property keys added)
 
 // ---------- Chunking ----------
 
@@ -71,9 +71,7 @@ function chunkModelo(): Array<{
     text: string;
     metadata: Record<string, unknown>;
   }> = [];
-  let idx = 0;
   for (const [cls, els] of byClass) {
-    idx += 1;
     const total = els.length;
     const externalCount = els.filter((e) => e.is_external === true).length;
     const materials = Array.from(
@@ -82,21 +80,51 @@ function chunkModelo(): Array<{
     const fireRatings = Array.from(
       new Set(els.map((e) => e.fire_rating).filter((m): m is string => !!m)),
     );
-    const sample = els.slice(0, 8).map((e) => {
-      const bits = [
-        e.name,
-        e.predefined_type ? `(${e.predefined_type})` : null,
-        e.spatial_container ? `en ${e.spatial_container}` : null,
-      ].filter(Boolean);
-      return `${e.express_id ?? "?"}: ${bits.join(" ")}`;
+
+    // Flat property key inventory per class — embedded in the chunk
+    // text so the LLM learns which top-level property names are
+    // valid for a given class when the agent goes to build a `filtro`.
+    // Nested objects (geometry_summary, material_layers, psets) are
+    // intentionally excluded because filterEvaluator only supports
+    // top-level access via `item[rule.p]`.
+    const allKeys = new Set<string>();
+    for (const it of els) {
+      for (const k of Object.keys(it)) {
+        if (k === "ifc_class") continue;
+        allKeys.add(k);
+      }
+    }
+    // Filter to scalar-ish top-level properties for the LLM-facing
+    // list. Object-valued keys (geometry_summary, material_layers,
+    // psets) are still in the allKeys set but won't show up as
+    // useful filter targets in `Propiedades filtrables`.
+    const scalarKeys = [...allKeys].filter((k) => {
+      const sample = els.find((e) => k in e)?.[k];
+      return sample === null || sample === undefined ||
+        typeof sample === "string" || typeof sample === "number" ||
+        typeof sample === "boolean";
+    }).sort();
+    const sample = els.slice(0, 2).map((it) => {
+      const sample_props: Record<string, unknown> = {};
+      for (const k of scalarKeys.slice(0, 8)) {
+        if (k in it) sample_props[k] = it[k];
+      }
+      return {
+        name: it.name ?? null,
+        predefined_type: it.predefined_type ?? null,
+        spatial_container: it.spatial_container ?? null,
+        sample_props,
+      };
     });
+
     const text = [
       `Clase IFC: ${cls}.`,
       `Total de elementos: ${total}.`,
       externalCount ? `Elementos exteriores: ${externalCount}.` : null,
       materials.length ? `Materiales: ${materials.join(", ")}.` : null,
       fireRatings.length ? `Resistencia al fuego: ${fireRatings.join(", ")}.` : null,
-      `Muestra: ${sample.join("; ")}.`,
+      `Propiedades filtrables (top-level): ${scalarKeys.join(", ") || "(solo ifc_class)"} .`,
+      `Muestra: ${JSON.stringify(sample).slice(0, 600)}.`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -104,7 +132,7 @@ function chunkModelo(): Array<{
       id: `modelo:${cls}`,
       corpus: "modelo",
       text,
-      metadata: { ifc_class: cls, count: total },
+      metadata: { ifc_class: cls, count: total, scalar_keys: scalarKeys },
     });
   }
   return chunks;

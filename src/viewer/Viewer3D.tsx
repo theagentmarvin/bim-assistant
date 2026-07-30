@@ -8,7 +8,7 @@ import * as OBCF from "@thatopen/components-front";
 import * as FRAGS from "@thatopen/fragments";
 import * as THREE from "three";
 
-import type { Mapping } from "../types";
+import type { Filter, Mapping } from "../types";
 import styles from "./Viewer3D.module.css";
 import { getFragmentWorkerUrl } from "./blobWorker";
 import { WEBIFC_WASM_BASE } from "./webIfc";
@@ -52,6 +52,11 @@ export interface ElementProperties { modelId: string; expressId: number; guid?: 
 interface Props {
   selectedIfcClass: string | null;
   mapping: Mapping | null;
+  /** Chat-driven Filter (Navisworks-style). Takes precedence over the
+   *  mapping's `results[].filter` when present. Wired in for RAG-for-IFC
+   *  interaction step 1: the agent builds the Filter from RAG chunks
+   *  and the viewer evaluates it against fragment items. */
+  agentFilter?: Filter | null;
   onElementClick?: (data: ElementClickData) => void;
   onElementData?: (data: ElementProperties) => void;
   /** Bump to soft-reset the viewer: clears the 'select' highlight in the
@@ -71,7 +76,7 @@ class EB extends React.Component<{ children: React.ReactNode }, { error: Error |
 
 export default function Viewer3D(p: Props) { return <EB><V {...p} /></EB>; }
 
-function V({ selectedIfcClass, mapping, onElementClick, onElementData, resetTrigger }: Props) {
+function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementData, resetTrigger }: Props) {
   const cr = useRef<HTMLDivElement | null>(null);
   const compR = useRef<OBC.Components | null>(null);
   const fragsR = useRef<OBC.FragmentsManager | null>(null);
@@ -342,8 +347,16 @@ function V({ selectedIfcClass, mapping, onElementClick, onElementData, resetTrig
     const allIds = Object.keys(items).map(Number);
     const all = new Set(allIds);
 
-    // Get filter expressions from mapping
-    const filters = mapping?.results?.map(r => r.filter).filter(f => !!f && (f.g?.length ?? 0) > 0) ?? [];
+    // Get filter expressions. The chat-driven `agentFilter` (Navisworks
+    // shape from `src/agent/schema.ts`) takes precedence over the
+    // mapping when present — the chat is the primary surface in the
+    // PoC. Otherwise we fall back to the mapping's first result filter
+    // (existing path, unchanged). (RAG-for-IFC interaction step 1.)
+    const filters: Filter[] = agentFilter
+      ? [agentFilter]
+      : (mapping?.results ?? [])
+          .map(r => r.filter)
+          .filter((f): f is Filter => !!f && (f.g?.length ?? 0) > 0);
     const hasFilter = filters.length > 0;
     let linked = 0;
 
@@ -372,6 +385,7 @@ function V({ selectedIfcClass, mapping, onElementClick, onElementData, resetTrig
       bimElements: bimElementCount(),
       filters: filters.length,
       selectedIfcClass,
+      agentFilter: agentFilter ? "(set)" : null,
     });
 
     // Ghost non-matching elements (instead of hiding).
@@ -420,7 +434,7 @@ function V({ selectedIfcClass, mapping, onElementClick, onElementData, resetTrig
       }).catch((e) => console.warn("[V3D] reset hide failed:", e));
       // (GHOST RESET) frags.list.get(MODEL_ID)?.resetOpacity(allIds).then(...);
     }
-  }, [selectedIfcClass, mapping, loaded]);
+  }, [selectedIfcClass, mapping, agentFilter, loaded]);
 
   // Soft reset: bump resetTrigger to clear the 'select' highlight in the
   // Highlighter WITHOUT remounting Viewer3D or reloading the IFC.

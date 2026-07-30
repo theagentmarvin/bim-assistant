@@ -10,6 +10,22 @@
 import type { Filter } from "../types";
 import { retrieveSnippets, embed } from "./retriever";
 import type { RetrievedHit } from "./retriever";
+import bimElementsRaw from "../../data/bim_elements.json";
+
+/**
+ * Count bim_elements.json entries by ifc_class. Defensive about the
+ * envelope shape: documented as { elements: [...] } but older
+ * extracts were sometimes a flat array.
+ */
+export function countByClass(ifcClass: string): number {
+  const env = bimElementsRaw as
+    | { elements?: Array<{ ifc_class?: string }> }
+    | Array<{ ifc_class?: string }>;
+  const list: Array<{ ifc_class?: string }> = Array.isArray(env)
+    ? env
+    : (env.elements ?? []);
+  return list.filter((e) => e.ifc_class === ifcClass).length;
+}
 
 // ----- Tool result types -----
 

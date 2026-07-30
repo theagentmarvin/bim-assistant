@@ -4,10 +4,35 @@
 // in Gemini's function-calling format. Names + descriptions are in
 // Spanish (the locked PoC scope).
 
+import bimElementsRaw from "../../data/bim_elements.json";
+
+// Derive the IFC class enum from bim_elements.json at module-load time.
+// Defensive about the envelope shape: the file is documented as
+// { elements: [...] } but older extracts were sometimes a flat array.
+type BimElementsEnvelope =
+  | { elements?: Array<{ ifc_class?: string }> }
+  | Array<{ ifc_class?: string }>;
+const _bimElements = bimElementsRaw as unknown as BimElementsEnvelope;
+const _bimList: Array<{ ifc_class?: string }> = Array.isArray(_bimElements)
+  ? _bimElements
+  : (_bimElements.elements ?? []);
+export const IFC_CLASS_ENUM: readonly string[] = Array.from(
+  new Set(
+    _bimList
+      .map((e) => e.ifc_class)
+      .filter((c): c is string => typeof c === "string" && c.length > 0),
+  ),
+).sort();
+
 export interface ToolParameterProperty {
-  type: "string" | "number" | "boolean" | "object";
+  type: "string" | "number" | "boolean" | "object" | "array";
   description: string;
   enum?: string[];
+  // Optional JSON Schema fields for nested object/array types (kept
+  // here so `filtro` can carry a structural hint to the LLM without
+  // breaking the rest of the surface).
+  properties?: Record<string, ToolParameterProperty>;
+  items?: ToolParameterProperty;
 }
 
 export interface ToolSchema {
@@ -51,7 +76,9 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
       properties: {
         clase_ifc: {
           type: "string",
-          description: "Ej: 'IfcWall', 'IfcWindow', 'IfcDoor'.",
+          enum: [...IFC_CLASS_ENUM],
+          description:
+            "Clase IFC presente en el modelo. Solo las clases de IFC_CLASS_ENUM son válidas.",
         },
         seccion_id: {
           type: "string",
@@ -61,7 +88,34 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
         filtro: {
           type: "object",
           description:
-            "Filtro directo (estructura AND/OR). Ver filterEvaluator.",
+            "Filtro Navisworks-style. Acceso solo a propiedades top-level (ej: 'is_external', 'predefined_type', 'name'). NO anidados (geometry_summary.x no funciona). Ejemplo real para 'muros exteriores': { c: 'AND', g: [{ c: 'AND', r: [{ p: 'ifc_class', op: 'equals', v: 'IfcWall' }, { p: 'is_external', op: 'equals', v: 'true' }] }] }. Operadores: equals, not_equals, contains, >, <, >=, <=, is_empty, is_not_empty.",
+          properties: {
+            c: { type: "string", enum: ["AND", "OR"], description: "Combinador global." },
+            g: {
+              type: "array",
+              description: "Grupos de reglas (AND/OR de reglas).",
+              items: {
+                type: "object",
+                description: "Grupo de reglas.",
+                properties: {
+                  c: { type: "string", enum: ["AND", "OR"], description: "Combinador del grupo." },
+                  r: {
+                    type: "array",
+                    description: "Reglas del grupo.",
+                    items: {
+                      type: "object",
+                      description: "Regla: propiedad + operador + valor (todos string).",
+                      properties: {
+                        p: { type: "string", description: "Nombre de la propiedad top-level (ej: 'is_external')." },
+                        op: { type: "string", description: "Operador: equals, not_equals, contains, >, <, >=, <=, is_empty, is_not_empty." },
+                        v: { type: "string", description: "Valor a comparar (como string)." },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         reset: {
           type: "boolean",

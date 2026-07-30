@@ -20,7 +20,7 @@ import { TOOL_SCHEMAS } from "./schema";
 import { JARVIS_SYSTEM_PROMPT } from "./prompts";
 import { runTool, type ToolContext, type ToolResult } from "./tools";
 
-const MAX_TURNS = 4;
+const MAX_TURNS = 6; // bumped 4→6 because RAG-before-filter (consultar_base_de_conocimiento → resaltar_elementos) consumes 2 turns
 
 export interface AgentCallbacks {
   onToolCallStart?: (name: string, args: Record<string, unknown>) => void;

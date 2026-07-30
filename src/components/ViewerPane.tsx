@@ -8,7 +8,7 @@
 
 import Viewer3D from "../viewer/Viewer3D";
 import type { ElementClickData, ElementProperties } from "../viewer/Viewer3D";
-import type { Mapping } from "../types";
+import type { Filter, Mapping } from "../types";
 import styles from "./ViewerPane.module.css";
 
 interface Props {
@@ -16,6 +16,9 @@ interface Props {
   mapping: Mapping | null;
   /** The IFC class extracted from the selected mapping's top result. */
   selectedIfcClass: string | null;
+  /** Chat-driven Filter (Navisworks-style). Takes precedence over
+   *  `mapping` in the viewer when present. */
+  agentFilter?: Filter | null;
   /** Optional click handler. */
   onElementClick?: (data: ElementClickData) => void;
   /** Element properties callback. */
@@ -29,6 +32,7 @@ interface Props {
 export default function ViewerPane({
   mapping,
   selectedIfcClass,
+  agentFilter,
   onElementClick,
   onElementData,
   resetTrigger,
@@ -40,7 +44,9 @@ export default function ViewerPane({
         <span className={styles.toolbarLabel}>
           {mapping
             ? `${mapping.section_id} — ${mapping.section_title}`
-            : "Sin sección seleccionada"}
+            : agentFilter
+              ? "Filtro del agente"
+              : "Sin sección seleccionada"}
         </span>
         <div className={styles.toolbarRight}>
           <span className={styles.toolbarHint}>Visor 3D · TOE fragments</span>
@@ -61,6 +67,7 @@ export default function ViewerPane({
         <Viewer3D
           selectedIfcClass={selectedIfcClass}
           mapping={mapping}
+          agentFilter={agentFilter}
           onElementClick={onElementClick}
           onElementData={onElementData}
           resetTrigger={resetTrigger}

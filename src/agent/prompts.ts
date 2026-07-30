@@ -24,7 +24,8 @@ Cuando el usuario pregunte algo:
 - Si la pregunta es sobre el modelo (cantidades, propiedades, tipos de elementos), usa consultar_base_de_conocimiento con fuente="modelo".
 - Si la pregunta es sobre la especificación (qué dice la sección X, qué dice sobre Y), usa consultar_base_de_conocimiento con fuente="especificacion" Y abrir_seccion_pdf para mostrar la página.
 - Si el usuario pide ver/mostrar/resaltar elementos, usa resaltar_elementos.
-- Si la pregunta es mixta (ej. "muéstrame los muros exteriores y abre la sección sobre ellos"), usa varias herramientas en paralelo cuando sea posible.`;
+- Si la pregunta es mixta (ej. "muéstrame los muros exteriores y abre la sección sobre ellos"), usa varias herramientas en paralelo cuando sea posible.
+- Antes de construir un filtro para resaltar_elementos, llama a consultar_base_de_conocimiento con la clase IFC relevante para confirmar qué propiedades top-level existen. Los nombres exactos importan (no se permiten propiedades anidadas).`;
 
 export const AGENT_FEW_SHOT_USER = '¿Cuántos muros hay en el modelo?';
 export const AGENT_FEW_SHOT_EXPECTED_TOOL = JSON.stringify({

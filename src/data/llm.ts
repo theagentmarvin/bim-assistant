@@ -14,15 +14,24 @@ import type { ToolSchema } from "../agent/schema";
 
 const GEMINI_BASE_URL =
   "https://generativelanguage.googleapis.com/v1beta/models";
-// Gemini 2.5 Flash is the locked model for PoC. Fall back to 2.0 if
-// 2.5 isn't GA in your account yet — the agent loop is model-agnostic
-// as long as it returns function calls in the shape we expect.
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Gemini Flash is the locked model for PoC. We use the rolling alias
+// `gemini-flash-latest` because `gemini-2.5-flash` is retired for new
+// accounts (404 "no longer available to new users") — verified via
+// ListModels on 2026-07-30 with Boss's key. Fallback in priority
+// order: `gemini-3.1-flash-lite`, `gemini-2.0-flash`. The agent loop
+// is model-agnostic as long as function-calling shape is preserved.
+const GEMINI_MODEL = "gemini-flash-latest";
 
 const FIREWORKS_EMBED_URL =
   "https://api.fireworks.ai/inference/v1/embeddings";
 const FIREWORKS_EMBED_MODEL = "fireworks/qwen3-embedding-8b";
-const EMBEDDING_DIM = 1024; // qwen3-embedding-8b output dim
+// qwen3-embedding-8b defaults to 4096-dim output. We pin to 1024 via
+// the OpenAI-compatible `dimensions` parameter (Matryoshka truncation),
+// matching the dim the spec mapper pipeline uses (MEMORY.md §
+// bim-specs-mapper — 1024-dim embeddings). Lower dim = 4× less memory
+// in IndexedDB + faster cosine math. Verified via Fireworks API probe
+// on 2026-07-30: explicit `dimensions: 1024` returns a 1024-dim vector.
+const EMBEDDING_DIM = 1024;
 
 export interface GeminiContent {
   role: "user" | "model" | "function";
@@ -125,6 +134,7 @@ export async function fireworksEmbed(
     body: JSON.stringify({
       model: FIREWORKS_EMBED_MODEL,
       input: text,
+      dimensions: EMBEDDING_DIM,
     }),
     signal,
   });

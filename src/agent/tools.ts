@@ -188,6 +188,14 @@ export function buildTabla(
   spec: TablaSpec,
 ): QuantificationTable | undefined {
   if (fuente !== "modelo") return undefined;
+  // Boss #14905 safeguard: refuse to build a table with neither a
+  // class filter nor a grouping. Without one of these, the table
+  // would dump every BIM element in the model — usually a sign the
+  // agent got confused about what the user asked for. Force the
+  // agent to be specific; the chat response stays as prose only.
+  if (!spec.clase_ifc && (!spec.agrupar_por || spec.agrupar_por.length === 0)) {
+    return undefined;
+  }
   let rows = getBimElements();
   if (spec.clase_ifc) {
     rows = rows.filter((r) => r.ifc_class === spec.clase_ifc);

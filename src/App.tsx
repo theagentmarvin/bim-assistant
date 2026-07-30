@@ -118,6 +118,15 @@ export default function App() {
   // seccion_id so the viewer doesn't carry stale filter state across
   // calls. (RAG-for-IFC interaction step 1.)
   const [agentFilter, setAgentFilter] = useState<Filter | null>(null);
+  // User-driven Filter (Navisworks-style) — set when the user clicks
+  // a row in the cuantificación table. Drives the Highlighter 'filter'
+  // style (yellow tint) in the viewer, NOT the Hider. The agent
+  // filter isolates (Hider); the user selection highlights
+  // (Highlighter). Both can coexist — e.g., agent says "show me
+  // muros" (Hider hides 4295 down to 187) and the user clicks a row
+  // (Highlighter yellows the 7 in that row, visible inside the
+  // Hider-filtered set). Boss clarification 2026-07-30 17:26.
+  const [userSelectionFilter, setUserSelectionFilter] = useState<Filter | null>(null);
   const [resetTrigger, setResetTrigger] = useState(0);
   const [selectedElement, setSelectedElement] = useState<ElementProperties | null>(null);
   // ----- Right pane (Spec PDF | Cuantificación) -----
@@ -263,11 +272,15 @@ export default function App() {
     [resaltar, abrirPdf],
   );
 
-  // ----- Row click in Cuantificación tab → viewer highlight -----
+  // ----- Row click in Cuantificación tab → user selection highlight -----
   // When the user clicks a row in the quantification table, build a
   // Filter that matches the row's express_ids and route it through
-  // the existing agentFilter pipeline (App → ViewerPane → Viewer3D).
-  // For grouping rows this fans out to every element in the bucket.
+  // userSelectionFilter (NOT agentFilter). The userSelectionFilter
+  // drives the Highlighter 'filter' style (yellow tint) in the
+  // viewer, while the agentFilter drives the Hider (isolation). For
+  // grouping rows this fans out to every element in the bucket.
+  // Boss clarification 2026-07-30 17:26: the highlight is for user
+  // clicks only; the agent filter still isolates.
   const handleRowSelect = useCallback((ids: number[]) => {
     if (ids.length === 0) return;
     const filter: Filter = {
@@ -283,9 +296,7 @@ export default function App() {
         },
       ],
     };
-    setAgentMappingId(null);
-    setAgentIfcClass(null);
-    setAgentFilter(filter);
+    setUserSelectionFilter(filter);
   }, []);
 
   // ----- Send handler -----
@@ -364,6 +375,7 @@ export default function App() {
     setAgentIfcClass(null);
     setAgentMappingId(null);
     setAgentFilter(null);
+    setUserSelectionFilter(null);
     setResetTrigger((k) => k + 1);
     setSelectedElement(null);
     setPdfPage(1);
@@ -504,6 +516,7 @@ export default function App() {
             mapping={agentMapping}
             selectedIfcClass={agentIfcClass}
             agentFilter={agentFilter}
+            userSelectionFilter={userSelectionFilter}
             onElementClick={handleElementClick}
             onElementData={handleElementData}
             resetTrigger={resetTrigger}
@@ -511,6 +524,7 @@ export default function App() {
               setAgentMappingId(null);
               setAgentIfcClass(null);
               setAgentFilter(null);
+              setUserSelectionFilter(null);
               setSelectedElement(null);
               setResetTrigger((k) => k + 1);
             }}

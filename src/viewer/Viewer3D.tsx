@@ -1,10 +1,20 @@
-// Viewer3D.tsx — v7
-// Filter highlight: OBCF.Highlighter 'filter' style (yellow, 0.35). All
-//   elements stay visible; matching ones get a soft tint. The Hider
-//   hide-non-matching pattern is gone (Boss 2026-07-30 17:14) — see
-//   FILTER_MAT below.
-// Click-to-select: OBCF.Highlighter 'select' style (orange, 0.6).
-//   White space click → clear('select'). Properties: onElementData callback.
+// Viewer3D.tsx — v8
+// Two independent filter mechanisms, selected by the SOURCE of the filter:
+//   1. Agent-driven filter (prompt / mapping / IFC class)
+//      → OBC.Hider isolates (hide non-matching). The original "focus
+//        mode" UX, restored in this commit after the v7 over-correction
+//        removed it (Boss 2026-07-30 17:26: "cuando el filtro corra por
+//        un promp del usuario debera aislar los elementos de interes en la
+//        vista. asi funcionaba antes pero perdimos la funcionaidad").
+//   2. User-driven selection (row click in cuantificación table, element
+//      click in viewer)
+//      → OBCF.Highlighter 'filter' style (yellow, 0.35) for row clicks
+//      → OBCF.Highlighter 'select' style (orange, 0.6) for element clicks
+//      Standard viewer behavior (TOE Highlighter example.ts).
+// Both effects are independent: agent filter AND user selection can
+// coexist. White space click → clear('select') only; the filter
+// highlight persists.
+// Properties: onElementData callback.
 
 import React, { useEffect, useRef, useState } from "react";
 import * as OBC from "@thatopen/components";
@@ -17,7 +27,7 @@ import styles from "./Viewer3D.module.css";
 import { getFragmentWorkerUrl } from "./blobWorker";
 import { WEBIFC_WASM_BASE } from "./webIfc";
 import { evaluateFilter, type FragmentItem } from "./filterEvaluator";
-import { bimElementCount, evaluationItemFor } from "../data/elements";
+import { evaluationItemFor } from "../data/elements";
 
 const MODEL_ID = "sza-bde3-arq-c1";
 const IFC_URL = "/SZA_BDE3_ARQ_C1.ifc";
@@ -75,13 +85,19 @@ interface Props {
   /** Chat-driven Filter (Navisworks-style). Takes precedence over the
    *  mapping's `results[].filter` when present. Wired in for RAG-for-IFC
    *  interaction step 1: the agent builds the Filter from RAG chunks
-   *  and the viewer evaluates it against fragment items. */
+   *  and the viewer evaluates it against fragment items. Drives the
+   *  Hider (isolation) — see Viewer3D v8 header. */
   agentFilter?: Filter | null;
+  /** User-driven Filter (Navisworks-style). Set when the user clicks
+   *  a row in the cuantificación table. Drives the Highlighter 'filter'
+   *  style (yellow tint) — independent from the Hider. */
+  userSelectionFilter?: Filter | null;
   onElementClick?: (data: ElementClickData) => void;
   onElementData?: (data: ElementProperties) => void;
-  /** Bump to soft-reset the viewer: clears the 'select' highlight in the
-   *  Highlighter without disposing the model. Boss directive 2026-07-27
-   *  09:40 — reset view should not reload the IFC. */
+  /** Bump to soft-reset the viewer: clears the 'select' highlight and
+   *  the 'filter' highlight in the Highlighter without disposing the
+   *  model. Boss directive 2026-07-27 09:40 — reset view should not
+   *  reload the IFC. */
   resetTrigger?: number;
 }
 
@@ -96,22 +112,20 @@ class EB extends React.Component<{ children: React.ReactNode }, { error: Error |
 
 export default function Viewer3D(p: Props) { return <EB><V {...p} /></EB>; }
 
-function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementData, resetTrigger }: Props) {
+function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElementClick, onElementData, resetTrigger }: Props) {
   const cr = useRef<HTMLDivElement | null>(null);
   const compR = useRef<OBC.Components | null>(null);
   const fragsR = useRef<OBC.FragmentsManager | null>(null);
   const worldR = useRef<OBC.World | null>(null);
   const hlR = useRef<OBCF.Highlighter | null>(null);
+  // v8 (Boss 2026-07-30 17:26): the Hider is BACK for agent-driven
+  // filters. The user wants the original "focus mode" UX — agent
+  // prompt hides non-matching. The user-driven selection (row click)
+  // goes through the Highlighter 'filter' style, which is independent.
+  const hiderR = useRef<OBC.Hider | null>(null);
   const disR = useRef(false);
   const loadedR = useRef(false);
   const itemsR = useRef<ItemsMap | null>(null);
-  // Boss follow-up (2026-07-30 17:14): the Hider-based isolation
-  // (hide non-matching) was the wrong ergonomics — users expected
-  // standard viewer behavior where the model stays fully visible
-  // and matching elements get a soft highlight. The Hider is gone,
-  // the matchingSetR ref is gone, and the Highlighter now owns both
-  // 'select' (orange, the click-highlight) and 'filter' (yellow, the
-  // agent-driven pre-highlight) — see FILTER_MAT above.
 
   const [status, setStatus] = useState("Initializing…");
   const [loaded, setLoaded] = useState(false);
@@ -152,8 +166,10 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
         w.scene.three.add(model.object); void frags.core.update(true);
       });
 
-      // Pre-warm raycaster (Hider is gone — see FILTER_MAT comment)
+      // Pre-warm raycaster + register Hider (used by the agent-filter
+      // effect below to isolate matching elements).
       c.get(OBC.Raycasters).get(w);
+      hiderR.current = c.get(OBC.Hider);
 
       if (w.renderer) {
         const hl = c.get(OBCF.Highlighter);
@@ -348,46 +364,38 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
       disR.current = true; loadedR.current = false; itemsR.current = null;
       pointerDownCleanup?.();
       const h = hlR.current; if (h) { void h.dispose().catch(() => {}); } hlR.current = null;
+      hiderR.current = null;
       try { c.dispose(); } catch { /* */ }
       compR.current = null; fragsR.current = null; worldR.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Filter-driven highlight via the Highlighter 'filter' style.
-  // Runs on section change (mapping), IFC class selection, or any
-  // chat-driven Filter (Navisworks shape from `src/agent/schema.ts`).
-  // Uses refs (not state) to check if model is loaded.
+  // Agent-driven filter → OBC.Hider isolation.
   //
-  // Boss follow-up (2026-07-30 17:14): the prior implementation used
-  // OBC.Hider to *hide* non-matching elements. Users wanted the
-  // standard viewer behavior — model stays fully visible, matching
-  // elements get a soft yellow tint. The Hider is gone; this effect
-  // now tints matching elements via hl.highlightByID("filter", ...).
-  // Trade-off vs hide: nothing is hidden, so the user sees the whole
-  // model with matching elements standing out in yellow. The Hider
-  // primitives are preserved in commit history if we ever need to
-  // bring back the "focus only" mode.
+  // Sources: agentFilter (chat-driven), mapping (PDF section click),
+  // selectedIfcClass (chat-driven IFC class). This is the
+  // "focus mode" — non-matching elements are hidden so the user
+  // sees only the elements of interest. Boss directive 2026-07-30
+  // 17:26: "cuando el filtro corra por un promp del usuario debera
+  // aislar los elementos de interes en la vista. asi funcionaba
+  // antes pero perdimos la funcionaidad". The Hider primitives were
+  // brought back in v8 after v7 (commit 5dedd4b) over-corrected and
+  // removed them entirely.
   useEffect(() => {
     if (!loadedR.current) return;
-    const frags = fragsR.current; if (!frags) return;
     const items = itemsR.current; if (!items) return;
-    const hl = hlR.current; if (!hl) { console.warn("[V3D] isolation: no highlighter"); return; }
+    const hider = hiderR.current; if (!hider) return;
 
-    const allIds = Object.keys(items).map(Number);
-    const all = new Set(allIds);
-
-    // Get filter expressions. The chat-driven `agentFilter` takes
-    // precedence over the mapping when present — the chat is the
-    // primary surface in the PoC. Otherwise we fall back to the
-    // mapping's first result filter.
     const filters: Filter[] = agentFilter
       ? [agentFilter]
       : (mapping?.results ?? [])
           .map(r => r.filter)
           .filter((f): f is Filter => !!f && (f.g?.length ?? 0) > 0);
     const hasFilter = filters.length > 0;
-    let linked = 0;
+
+    const allIds = Object.keys(items).map(Number);
+    const all = new Set(allIds);
 
     let matching: Set<number>;
     if (hasFilter || selectedIfcClass) {
@@ -395,7 +403,6 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
       for (const [idStr, item] of Object.entries(items)) {
         const id = Number(idStr);
         const evaluationItem = evaluationItemFor(id, item) as FragmentItem;
-        if (evaluationItem.express_id || evaluationItem.element_id) linked += 1;
         const m = hasFilter
           ? filters.some(f => evaluateFilter(f, evaluationItem))
           : evaluationItem.ifc_class === selectedIfcClass;
@@ -405,43 +412,85 @@ function V({ selectedIfcClass, mapping, agentFilter, onElementClick, onElementDa
       matching = new Set(all);
     }
 
-    console.log("[V3D] filter-highlight:", {
+    console.log("[V3D] hider (agent filter):", {
       matching: matching.size,
       total: all.size,
-      linked,
-      bimElements: bimElementCount(),
       filters: filters.length,
       selectedIfcClass,
       agentFilter: agentFilter ? "(set)" : null,
     });
 
-    // Apply / clear the 'filter' highlight. Always clear first so a
-    // previous filter's matching set doesn't leak into the new one.
-    // Then, if there's a meaningful filter (matching < total), tint
-    // the matching elements. Note: highlightByID with removePrevious
-    // = false means we own the clearing path explicitly above.
     if (hasFilter || selectedIfcClass) {
-      if (matching.size > 0 && matching.size < all.size) {
-        hl.clear("filter").catch(() => {});
+      if (matching.size < all.size) {
+        const nonMatchingIds = allIds.filter(id => !matching.has(id));
+        const visibleMap = { [MODEL_ID]: new Set([...matching]) };
+        const hiddenMap  = { [MODEL_ID]: new Set(nonMatchingIds) };
+        Promise.all([
+          hider.set(true,  visibleMap),
+          hider.set(false, hiddenMap),
+        ]).then(() => {
+          if (disR.current) return;
+          setStatus(`1 model · ${matching.size} matching / ${all.size} total`);
+        }).catch((e) => console.warn("[V3D] hide failed:", e));
+      } else {
+        // All elements match (full coverage) — just show all.
+        hider.set(true, { [MODEL_ID]: new Set(allIds) }).then(() => {
+          if (disR.current) return;
+          setStatus("1 model loaded");
+        }).catch((e) => console.warn("[V3D] reset hide failed:", e));
+      }
+    } else {
+      // No agent filter — show all.
+      hider.set(true, { [MODEL_ID]: new Set(allIds) }).then(() => {
+        if (disR.current) return;
+        setStatus("1 model loaded");
+      }).catch((e) => console.warn("[V3D] reset hide failed:", e));
+    }
+  }, [agentFilter, mapping, selectedIfcClass, loaded]);
+
+  // User-driven selection → OBCF.Highlighter 'filter' style.
+  //
+  // Source: userSelectionFilter (set by row click in the
+  // cuantificación table). This is the "highlight mode" — all
+  // elements stay visible, matching elements get a soft yellow
+  // tint via the Highlighter. Boss directive 2026-07-30 17:26:
+  // "lo del highlight al selecionar es solo si el usuario da click
+  // a una fila de la tabla o elemento en el modelo". Independent
+  // from the Hider (which is agent-driven only).
+  useEffect(() => {
+    if (!loadedR.current) return;
+    const items = itemsR.current; if (!items) return;
+    const hl = hlR.current; if (!hl) return;
+
+    if (userSelectionFilter) {
+      const matching = new Set<number>();
+      for (const [idStr, item] of Object.entries(items)) {
+        const id = Number(idStr);
+        const evaluationItem = evaluationItemFor(id, item) as FragmentItem;
+        if (evaluateFilter(userSelectionFilter, evaluationItem)) {
+          matching.add(id);
+        }
+      }
+
+      console.log("[V3D] highlighter (user selection):", {
+        matching: matching.size,
+        total: Object.keys(items).length,
+      });
+
+      // Always clear first so the previous run's matching set
+      // doesn't leak. Then re-apply to the new matching set.
+      hl.clear("filter").catch(() => {});
+      if (matching.size > 0) {
         hl.highlightByID(
           "filter",
           { [MODEL_ID]: new Set([...matching]) },
           false,
-        ).then(() => {
-          if (disR.current) return;
-          setStatus(`1 model · ${matching.size} matching / ${all.size} total`);
-        }).catch((e) => console.warn("[V3D] filter highlight failed:", e));
-      } else {
-        // All elements match (or zero match) — nothing to highlight.
-        hl.clear("filter").catch(() => {});
-        setStatus("1 model loaded");
+        ).catch((e) => console.warn("[V3D] filter highlight failed:", e));
       }
     } else {
-      // No filter active — clear filter highlight.
       hl.clear("filter").catch(() => {});
-      setStatus("1 model loaded");
     }
-  }, [selectedIfcClass, mapping, agentFilter, loaded]);
+  }, [userSelectionFilter, loaded]);
 
   // Soft reset: bump resetTrigger to clear BOTH highlighter styles.
   // 'select' = the click highlight; 'filter' = the agent-filter

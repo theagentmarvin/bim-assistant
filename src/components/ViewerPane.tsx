@@ -17,8 +17,13 @@ interface Props {
   /** The IFC class extracted from the selected mapping's top result. */
   selectedIfcClass: string | null;
   /** Chat-driven Filter (Navisworks-style). Takes precedence over
-   *  `mapping` in the viewer when present. */
+   *  `mapping` in the viewer when present. Drives the Hider
+   *  (isolation) — see Viewer3D. */
   agentFilter?: Filter | null;
+  /** User-driven Filter (Navisworks-style). Set by row clicks in the
+   *  Cuantificación table. Drives the Highlighter 'filter' style
+   *  (yellow tint) — independent from the Hider. */
+  userSelectionFilter?: Filter | null;
   /** Optional click handler. */
   onElementClick?: (data: ElementClickData) => void;
   /** Element properties callback. */
@@ -33,6 +38,7 @@ export default function ViewerPane({
   mapping,
   selectedIfcClass,
   agentFilter,
+  userSelectionFilter,
   onElementClick,
   onElementData,
   resetTrigger,
@@ -68,6 +74,7 @@ export default function ViewerPane({
           selectedIfcClass={selectedIfcClass}
           mapping={mapping}
           agentFilter={agentFilter}
+          userSelectionFilter={userSelectionFilter}
           onElementClick={onElementClick}
           onElementData={onElementData}
           resetTrigger={resetTrigger}

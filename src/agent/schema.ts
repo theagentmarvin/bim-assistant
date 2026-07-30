@@ -74,7 +74,7 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
             },
             columnas: {
               type: "array",
-              description: "Columnas a mostrar. Etiquetas en español que el tool resuelve a sus claves top-level (ej: 'Nombre' → name, 'Material' → material_name). NO listes propiedades que no existen en la clase.",
+              description: "Columnas a mostrar. Etiquetas en español que el tool resuelve a sus claves (top-level o nested bajo geometry_summary). Ejemplos: 'Nombre' → name, 'Material' → material_name, 'Largo' → geometry_summary.length_m, 'Ancho' → geometry_summary.width_m, 'Alto' → geometry_summary.height_m. NO listes propiedades que no existen en la clase.",
               items: { type: "string", description: "Etiqueta de columna en español." },
             },
             agrupar_por: {

@@ -133,6 +133,24 @@ const COLUMN_LABEL_TO_KEY: Record<string, string> = {
   "tipo predefinido": "predefined_type", predefined_type: "predefined_type",
   elemento_id: "element_id", element_id: "element_id",
   express_id: "express_id",
+  // Dimensions — these are nested under geometry_summary, NOT top-level.
+  // The agent prompts in Spanish ("largo", "ancho", "alto") but the data
+  // path is dotted (geometry_summary.length_m etc.). projectRowFull
+  // uses getPropertyByPath below to resolve.
+  // Added 2026-07-30: prior to this, "largo" hit the snake_case
+  // fallback ("largo" → "largo") and `row["largo"]` returned undefined
+  // → cell stayed "—". Column header was added but cell was empty.
+  largo: "geometry_summary.length_m",
+  ancho: "geometry_summary.width_m",
+  alto: "geometry_summary.height_m",
+  // English aliases (in case the agent uses English labels).
+  length: "geometry_summary.length_m",
+  width: "geometry_summary.width_m",
+  height: "geometry_summary.height_m",
+  // Direct dotted-path aliases (in case the agent passes the raw key).
+  length_m: "geometry_summary.length_m",
+  width_m: "geometry_summary.width_m",
+  height_m: "geometry_summary.height_m",
 };
 
 function resolveColumnKey(label: string): string | null {
@@ -141,6 +159,26 @@ function resolveColumnKey(label: string): string | null {
   const lower = trimmed.toLowerCase();
   if (COLUMN_LABEL_TO_KEY[lower]) return COLUMN_LABEL_TO_KEY[lower];
   return /^[a-z][a-z0-9_]*$/.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * Get a possibly-nested property from a BIM element row. Resolves
+ * dotted paths like "geometry_summary.length_m" by walking the
+ * object tree. Returns undefined for any missing segment.
+ * Added 2026-07-30: the prior projection only did top-level
+ * lookups, so any resolution to a nested key (e.g. "largo" →
+ * "geometry_summary.length_m") silently returned undefined.
+ */
+function getPropertyByPath(row: Record<string, unknown>, path: string): unknown {
+  const parts = path.split(".");
+  let current: unknown = row;
+  for (const part of parts) {
+    if (current === null || current === undefined || typeof current !== "object") {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
 }
 
 function getBimElements(): Array<Record<string, unknown>> {
@@ -171,14 +209,16 @@ function projectRowFull(
   columns: string[],
 ): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = {};
-  // Pass 1 — agent's columns, keyed by label.
+  // Pass 1 — agent's columns, keyed by label. Uses getPropertyByPath
+  // so columns whose resolved key is dotted (e.g. "largo" →
+  // "geometry_summary.length_m") actually find their value.
   for (const col of columns) {
     const key = resolveColumnKey(col);
     if (!key) {
       out[col] = "—";
       continue;
     }
-    const v = row[key];
+    const v = getPropertyByPath(row, key);
     let value: string | number | boolean;
     if (v === null || v === undefined) value = "—";
     else if (typeof v === "boolean") value = v ? "sí" : "no";
@@ -193,6 +233,25 @@ function projectRowFull(
   for (const [k, v] of Object.entries(row)) {
     if (k === "ifc_class") continue;
     if (out[k] !== undefined) continue; // already projected by label pass
+    // Flatten geometry_summary into top-level keys so the "Agregar
+    // columna" dropdown in QuantificationPanel can offer length_m,
+    // width_m, height_m, volume_m3 as direct column choices. Prior
+    // to this, the dropdown listed `geometry_summary` as a single
+    // JSON-stringified entry — selecting it dumped the whole nested
+    // object into one cell. The flattened keys are what the
+    // "Agregar columna" inventory consumes via computeAvailableProperties.
+    if (k === "geometry_summary" && v && typeof v === "object") {
+      for (const [gk, gv] of Object.entries(v as Record<string, unknown>)) {
+        if (out[gk] !== undefined) continue;
+        let gvalue: string | number | boolean;
+        if (gv === null || gv === undefined) gvalue = "—";
+        else if (typeof gv === "boolean") gvalue = gv ? "sí" : "no";
+        else if (typeof gv === "number" || typeof gv === "string") gvalue = gv;
+        else gvalue = JSON.stringify(gv);
+        out[gk] = gvalue;
+      }
+      continue;
+    }
     let value: string | number | boolean;
     if (v === null || v === undefined) value = "—";
     else if (typeof v === "boolean") value = v ? "sí" : "no";

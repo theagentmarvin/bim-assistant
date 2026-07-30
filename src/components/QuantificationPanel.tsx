@@ -21,10 +21,34 @@ import styles from "./QuantificationPanel.module.css";
 // table-layout: fixed, every column gets an explicit width and the
 // "nombre" column stops eating the table. Widths persist in
 // localStorage so the user's layout survives a reload.
-const DEFAULT_COL_WIDTH = 160;
 const MIN_COL_WIDTH = 60;
 const MAX_COL_WIDTH = 600;
 const COL_WIDTHS_STORAGE_KEY = "bim-assistant:quantification:colwidths";
+
+/**
+ * Boss 2026-07-30 17:48 — content-based default column width. The
+ * fixed 160px default crowded long window names and short numeric
+ * dimensions the same way. This heuristic sizes the column to its
+ * longest cell value so names get ~240-320px and numbers ~100px
+ * on first render. Manual drags still override via colWidths.
+ */
+function getDynamicColumnWidth(
+  col: string,
+  rows: ReadonlyArray<DataRow>,
+): number {
+  let maxLength = col.length;
+  for (const row of rows) {
+    const v = row[col];
+    if (v === null || v === undefined) continue;
+    const s = String(v);
+    if (s.length > maxLength) maxLength = s.length;
+  }
+  if (maxLength < 6) return 80;
+  if (maxLength < 16) return 120;
+  if (maxLength < 30) return 180;
+  if (maxLength < 50) return 240;
+  return 320;
+}
 
 interface Props {
   data: QuantificationTable | null;
@@ -90,7 +114,7 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
   const getColumnWidth = (col: string): number => {
     const w = colWidths[col];
     if (typeof w === "number" && w >= MIN_COL_WIDTH && w <= MAX_COL_WIDTH) return w;
-    return DEFAULT_COL_WIDTH;
+    return getDynamicColumnWidth(col, rowsWithMeta.map(m => m.row));
   };
 
   const startResize = (col: string, e: React.MouseEvent) => {
@@ -166,6 +190,26 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
       express_ids: data.filas_express_ids?.[i] ?? [],
     }));
   }, [data, filter, sortKey, sortDir, allColumns]);
+
+  // Auto-fit: apply content-based default to every column that doesn't
+  // have a stored override. Reads colWidths via a ref (not the dep
+  // array) so manual drags don't trigger this effect — we'd otherwise
+  // overwrite the user's manual width on every render. Lives here
+  // (after rowsWithMeta) because the closure references allColumns
+  // and rowsWithMeta which are declared with useMemo above.
+  const colWidthsRef = useRef(colWidths);
+  colWidthsRef.current = colWidths;
+  useEffect(() => {
+    if (!data) return;
+    const newWidths: Record<string, number> = {};
+    for (const col of allColumns) {
+      if (colWidthsRef.current[col] !== undefined) continue;
+      newWidths[col] = getDynamicColumnWidth(col, rowsWithMeta.map((m) => m.row));
+    }
+    if (Object.keys(newWidths).length > 0) {
+      setColWidths((prev) => ({ ...prev, ...newWidths }));
+    }
+  }, [data, allColumns, rowsWithMeta]);
 
   if (!data) {
     return (

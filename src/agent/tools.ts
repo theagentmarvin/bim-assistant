@@ -139,16 +139,15 @@ const COLUMN_LABEL_TO_KEY: Record<string, string> = {
   "tipo predefinido": "predefined_type", predefined_type: "predefined_type",
   elemento_id: "element_id", element_id: "element_id",
   express_id: "express_id",
-  // Dimensions — these are nested under geometry_summary, NOT top-level.
-  // The agent prompts in Spanish ("largo", "ancho", "alto") but the data
-  // path is dotted (geometry_summary.length_m etc.). projectRowFull
-  // uses getPropertyByPath below to resolve.
-  // Added 2026-07-30: prior to this, "largo" hit the snake_case
-  // fallback ("largo" → "largo") and `row["largo"]` returned undefined
-  // → cell stayed "—". Column header was added but cell was empty.
-  largo: "geometry_summary.length_m",
-  ancho: "geometry_summary.width_m",
-  alto: "geometry_summary.height_m",
+  // Dimensions — these now resolve directly to the flattened Qto_*
+  // top-level keys (Boss 2026-07-30 task-psets-flattening). The
+  // resolver looks for an available column ending with ".<bare>"
+  // (e.g. "Qto_WallBaseQuantities.Width"). The English + dotted-path
+  // aliases below still resolve to geometry_summary.* for callers
+  // that want the legacy nested path.
+  largo: "Length",
+  ancho: "Width",
+  alto: "Height",
   // English aliases (in case the agent uses English labels).
   length: "geometry_summary.length_m",
   width: "geometry_summary.width_m",
@@ -157,13 +156,104 @@ const COLUMN_LABEL_TO_KEY: Record<string, string> = {
   length_m: "geometry_summary.length_m",
   width_m: "geometry_summary.width_m",
   height_m: "geometry_summary.height_m",
+  // Flattened Qto properties (Boss 2026-07-30 task-psets-flattening).
+  // `volumen` carries an explicit regex (`Qto_.*GrossVolume`) and
+  // resolves against the row's available scalar top-level keys
+  // (returns the first class-specific match, e.g.
+  // "Qto_WallBaseQuantities.GrossVolume"). The other entries are
+  // bare names that the resolver treats as partial-match targets —
+  // it looks for any available column ending with ".<bare>".
+  volumen: "Qto_.*GrossVolume",
+  altura: "Height",
+  area: "NetSideArea",
+  "area neta": "NetSideArea",
+  "area bruta": "GrossSideArea",
+  "volumen bruto": "GrossVolume",
+  "volumen neto": "NetVolume",
 };
 
-function resolveColumnKey(label: string): string | null {
+/**
+ * Scalar top-level keys present in the given rows. Used to power
+ * partial-match lookups in resolveColumnKey so labels like "volumen"
+ * or "Height" resolve to class-specific flattened keys like
+ * "Qto_WallBaseQuantities.GrossVolume" without hardcoding every
+ * class-specific prefix. Added 2026-07-30 (task-psets-flattening).
+ */
+function getScalarTopLevelKeys(
+  rows: Array<Record<string, unknown>>,
+): string[] {
+  const keys = new Set<string>();
+  for (const r of rows) {
+    for (const k of Object.keys(r)) {
+      const v = r[k];
+      if (
+        v === null ||
+        v === undefined ||
+        typeof v === "string" ||
+        typeof v === "number" ||
+        typeof v === "boolean"
+      ) {
+        keys.add(k);
+      }
+    }
+  }
+  return [...keys].sort();
+}
+
+/**
+ * Map a Spanish / snake_case column label the agent supplies to the
+ * actual top-level property key on the BIM element.
+ *
+ * Resolution order (Boss 2026-07-30 task-psets-flattening):
+ *   1. Exact match in COLUMN_LABEL_TO_KEY
+ *      a. Regex marker (`.*`): find first available column matching.
+ *      b. Bare name: prefer available column ending with ".<name>"
+ *         (e.g. "Width" → "Qto_WallBaseQuantities.Width"), else
+ *         return literal mapped value.
+ *   2. Exact match against availableColumns (case-insensitive)
+ *   3. Partial match: first column containing the label as a
+ *      substring (case-insensitive)
+ *   4. Snake_case fallback
+ *
+ * The `availableColumns` argument is optional. When omitted the
+ * function falls back to map lookup + snake_case (legacy behavior).
+ */
+function resolveColumnKey(
+  label: string,
+  availableColumns?: string[],
+): string | null {
   const trimmed = label.trim();
   if (trimmed === "") return null;
   const lower = trimmed.toLowerCase();
-  if (COLUMN_LABEL_TO_KEY[lower]) return COLUMN_LABEL_TO_KEY[lower];
+  const mapped = COLUMN_LABEL_TO_KEY[lower];
+  if (mapped !== undefined) {
+    // Regex marker: resolve against availableColumns.
+    if (mapped.includes(".*")) {
+      if (!availableColumns || availableColumns.length === 0) return null;
+      try {
+        const re = new RegExp(mapped, "i");
+        const match = availableColumns.find((c) => re.test(c));
+        if (match) return match;
+      } catch {
+        /* fall through */
+      }
+      return null;
+    }
+    // Bare-name: prefer a column that ends with ".<mapped>" (the
+    // class-specific flattened Qto key). Falls back to literal
+    // (e.g. geometry_summary.length_m via the English aliases).
+    if (availableColumns && availableColumns.length > 0) {
+      const endsWith = availableColumns.find((c) => c.endsWith("." + mapped));
+      if (endsWith) return endsWith;
+    }
+    return mapped;
+  }
+  if (availableColumns && availableColumns.length > 0) {
+    const exact = availableColumns.find((c) => c.toLowerCase() === lower);
+    if (exact) return exact;
+    const partial = availableColumns.find((c) => c.toLowerCase().includes(lower));
+    if (partial) return partial;
+  }
   return /^[a-z][a-z0-9_]*$/.test(trimmed) ? trimmed : null;
 }
 
@@ -171,11 +261,20 @@ function resolveColumnKey(label: string): string | null {
  * Get a possibly-nested property from a BIM element row. Resolves
  * dotted paths like "geometry_summary.length_m" by walking the
  * object tree. Returns undefined for any missing segment.
+ *
+ * First tries the path as a LITERAL key — flat top-level keys
+ * like "Qto_WallBaseQuantities.GrossVolume" legitimately contain
+ * dots as part of their name (Boss 2026-07-30 task-psets-flattening)
+ * and are NOT a navigation path.
+ *
  * Added 2026-07-30: the prior projection only did top-level
  * lookups, so any resolution to a nested key (e.g. "largo" →
  * "geometry_summary.length_m") silently returned undefined.
  */
 function getPropertyByPath(row: Record<string, unknown>, path: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(row, path)) {
+    return row[path];
+  }
   const parts = path.split(".");
   let current: unknown = row;
   for (const part of parts) {
@@ -213,13 +312,18 @@ function getBimElements(): Array<Record<string, unknown>> {
 function projectRowFull(
   row: Record<string, unknown>,
   columns: string[],
+  availableColumns?: string[],
 ): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = {};
   // Pass 1 — agent's columns, keyed by label. Uses getPropertyByPath
   // so columns whose resolved key is dotted (e.g. "largo" →
   // "geometry_summary.length_m") actually find their value.
+  // `availableColumns` is passed through to resolveColumnKey so
+  // partial-match / regex lookups (Boss 2026-07-30
+  // task-psets-flattening) can resolve "volumen" → the class's
+  // specific Qto_GrossVolume key.
   for (const col of columns) {
-    const key = resolveColumnKey(col);
+    const key = resolveColumnKey(col, availableColumns);
     if (!key) {
       out[col] = "—";
       continue;
@@ -340,6 +444,12 @@ export function buildTabla(
   if (spec.clase_ifc) {
     rows = rows.filter((r) => r.ifc_class === spec.clase_ifc);
   }
+  // Scalar top-level keys present in the filtered rows — passed to
+  // resolveColumnKey so labels like "volumen" or "Height" can be
+  // resolved against the actual flattened Qto keys (e.g.
+  // "Qto_WallBaseQuantities.GrossVolume") without hardcoding every
+  // class-specific prefix. Added 2026-07-30 task-psets-flattening.
+  const availableColumns = getScalarTopLevelKeys(rows);
   if (spec.agrupar_por && spec.agrupar_por.length > 0) {
     // Bucket per group key + collect every express_id in the bucket
     // so a row click in the UI can highlight all matching elements.
@@ -381,7 +491,7 @@ export function buildTabla(
     };
   }
   if (!spec.columnas || spec.columnas.length === 0) return undefined;
-  const validColumns = spec.columnas.filter((c) => resolveColumnKey(c) !== null);
+  const validColumns = spec.columnas.filter((c) => resolveColumnKey(c, availableColumns) !== null);
   if (validColumns.length === 0) return undefined;
   // Boss #14917: project ALL top-level properties into each row so
   // the UI can add columns at runtime. The `columnas` array drives
@@ -389,7 +499,7 @@ export function buildTabla(
   const filas_express_ids: number[][] = rows.map((r) =>
     typeof r.express_id === "number" ? [r.express_id] : [],
   );
-  const filas = rows.map((r) => projectRowFull(r, validColumns));
+  const filas = rows.map((r) => projectRowFull(r, validColumns, availableColumns));
   return {
     titulo: spec.titulo ?? defaultTitulo(spec, filas.length),
     columnas: validColumns,

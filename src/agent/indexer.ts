@@ -34,7 +34,7 @@ export type IndexProgressCallback = (e: IndexProgressEvent) => void;
 
 const META_HASH_KEY = "index.hash.v1";
 const META_TS_KEY = "index.timestamp.v1";
-const META_VERSION = "2"; // bump when chunk shape changes (e.g. flat property keys added)
+const META_VERSION = "3"; // bump when chunk shape changes (Boss 2026-07-30: flattened psets added → invalidate IndexedDB)
 
 // ---------- Chunking ----------
 

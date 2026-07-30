@@ -4,9 +4,13 @@
 // latest `tabla` from the agent (App.tsx owns it) and renders:
 //   - header (titulo + meta + source)
 //   - sortable, searchable table
-//   - toolbar (Copy TSV / Copy CSV / Search)
+//   - toolbar (Copy TSV / Copy CSV / Add column / Search)
 //
-// Empty state when no tabla has arrived yet.
+// Boss #14882: row-click → onRowSelect → App.handleRowSelect →
+// setAgentFilter → Viewer3D highlight on matching BIM elements.
+// Boss #14917: rows carry ALL element properties (built by tools.ts),
+// so users can dynamically add columns from `data.available_properties`
+// without re-querying.
 
 import { useMemo, useState } from "react";
 import { buildTSV, buildCSV, copyToClipboard, type Row as DataRow } from "../utils/copy";
@@ -23,20 +27,49 @@ interface Props {
 
 type SortDir = "asc" | "desc" | null;
 
+interface RowMeta {
+  row: DataRow;
+  express_ids: number[];
+}
+
 export default function QuantificationPanel({ data, onRowSelect }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
+  // Boss #14917: columns the user has added on top of the agent's
+  // selection. Persisted across filter/sort (recomputed with rows).
+  const [extraColumns, setExtraColumns] = useState<string[]>([]);
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
 
-  const filteredRows = useMemo<DataRow[]>(() => {
+  // All columns currently displayed: agent's choice + user extras.
+  // The agent's columns stay fixed (you can't remove them — that
+  // would lose information). User-added columns can be removed via ×.
+  const allColumns: string[] = useMemo(() => {
     if (!data) return [];
+    return [...data.columnas, ...extraColumns];
+  }, [data, extraColumns]);
+
+  // Properties the user can still add (everything except what's already
+  // shown). available_properties already excludes the agent's columns,
+  // so we just need to also exclude the user's own extras.
+  const addableProperties: string[] = useMemo(() => {
+    if (!data?.available_properties) return [];
+    const taken = new Set([...data.columnas, ...extraColumns]);
+    return data.available_properties.filter((p) => !taken.has(p));
+  }, [data, extraColumns]);
+
+  // Boss #14917: track original indices through filter+sort so row
+  // clicks always reference the correct express_ids, regardless of
+  // the displayed ordering.
+  const rowsWithMeta = useMemo<RowMeta[]>(() => {
+    if (!data) return [];
+    let indices = data.filas.map((_, i) => i);
     const needle = filter.trim().toLowerCase();
-    let rows = data.filas;
     if (needle) {
-      rows = rows.filter((r) =>
-        data.columnas.some((c) => {
-          const v = r[c];
+      indices = indices.filter((i) =>
+        allColumns.some((c) => {
+          const v = data.filas[i][c];
           return v !== null && v !== undefined && String(v).toLowerCase().includes(needle);
         }),
       );
@@ -44,10 +77,15 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
     if (sortKey && sortDir) {
       const key = sortKey;
       const dir = sortDir === "asc" ? 1 : -1;
-      rows = [...rows].sort((a, b) => compareCells(a[key], b[key]) * dir);
+      indices = [...indices].sort(
+        (a, b) => compareCells(data.filas[a][key], data.filas[b][key]) * dir,
+      );
     }
-    return rows;
-  }, [data, filter, sortKey, sortDir]);
+    return indices.map((i) => ({
+      row: data.filas[i],
+      express_ids: data.filas_express_ids?.[i] ?? [],
+    }));
+  }, [data, filter, sortKey, sortDir, allColumns]);
 
   if (!data) {
     return (
@@ -78,14 +116,35 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
     sortKey === col && sortDir ? (sortDir === "asc" ? "ascending" : "descending") : "none";
 
   const totalRows = data.filas.length;
-  const filteredCount = filteredRows.length;
+  const filteredCount = rowsWithMeta.length;
   const generableAt = formatTime(data.generadaEn);
 
   const onCopy = async (format: "tsv" | "csv") => {
-    const text = format === "tsv" ? buildTSV(data.columnas, filteredRows) : buildCSV(data.columnas, filteredRows);
+    const headers = allColumns;
+    const rows = rowsWithMeta.map((m) => {
+      const out: DataRow = {};
+      for (const c of headers) out[c] = m.row[c];
+      return out;
+    });
+    const text = format === "tsv" ? buildTSV(headers, rows) : buildCSV(headers, rows);
     const ok = await copyToClipboard(text);
     setCopyHint(ok ? `${format.toUpperCase()} copiado` : `Error al copiar ${format.toUpperCase()}`);
     window.setTimeout(() => setCopyHint(null), 1800);
+  };
+
+  const addColumn = (prop: string) => {
+    if (!extraColumns.includes(prop)) {
+      setExtraColumns([...extraColumns, prop]);
+    }
+    setShowColumnMenu(false);
+  };
+
+  const removeExtraColumn = (prop: string) => {
+    setExtraColumns(extraColumns.filter((p) => p !== prop));
+    if (sortKey === prop) {
+      setSortKey(null);
+      setSortDir(null);
+    }
   };
 
   return (
@@ -102,52 +161,67 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
         <table className={styles.table}>
           <thead>
             <tr>
-              {data.columnas.map((c) => (
-                <th
-                  key={c}
-                  scope="col"
-                  aria-sort={ariaSortFor(c)}
-                  className={styles.th}
-                >
-                  <button
-                    type="button"
-                    className={styles.sortBtn}
-                    onClick={() => onHeaderClick(c)}
-                    aria-label={`Ordenar por ${c}`}
+              {allColumns.map((c) => {
+                const isExtra = extraColumns.includes(c);
+                return (
+                  <th
+                    key={c}
+                    scope="col"
+                    aria-sort={ariaSortFor(c)}
+                    className={styles.th}
+                    data-extra={isExtra ? "true" : undefined}
                   >
-                    <span>{c}</span>
-                    <span className={styles.sortIcon} aria-hidden="true">
-                      {sortKey === c ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
-                    </span>
-                  </button>
-                </th>
-              ))}
+                    <button
+                      type="button"
+                      className={styles.sortBtn}
+                      onClick={() => onHeaderClick(c)}
+                      aria-label={`Ordenar por ${c}`}
+                    >
+                      <span>{c}</span>
+                      <span className={styles.sortIcon} aria-hidden="true">
+                        {sortKey === c ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
+                      </span>
+                    </button>
+                    {isExtra && (
+                      <button
+                        type="button"
+                        className={styles.removeColBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeExtraColumn(c);
+                        }}
+                        aria-label={`Quitar columna ${c}`}
+                        title="Quitar columna"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {filteredRows.length === 0 && (
+            {rowsWithMeta.length === 0 && (
               <tr>
-                <td className={styles.emptyCell} colSpan={data.columnas.length}>
+                <td className={styles.emptyCell} colSpan={allColumns.length}>
                   Ninguna fila coincide con el filtro.
                 </td>
               </tr>
             )}
-            {filteredRows.map((row, i) => {
-              // Glue: parallel array on the table (same length as filas).
-              // See quantification/types.ts filas_express_ids for rationale.
-              const ids = data.filas_express_ids?.[i] ?? [];
-              const clickable = ids.length > 0 && !!onRowSelect;
+            {rowsWithMeta.map(({ row, express_ids }, i) => {
+              const clickable = express_ids.length > 0 && !!onRowSelect;
               return (
                 <tr
                   key={i}
                   className={`${styles.row}${clickable ? ` ${styles.rowClickable}` : ""}`}
-                  onClick={clickable ? () => onRowSelect!(ids) : undefined}
+                  onClick={clickable ? () => onRowSelect!(express_ids) : undefined}
                   onKeyDown={
                     clickable
                       ? (e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            onRowSelect!(ids);
+                            onRowSelect!(express_ids);
                           }
                         }
                       : undefined
@@ -156,12 +230,12 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
                   role={clickable ? "button" : undefined}
                   aria-label={
                     clickable
-                      ? `Resaltar ${ids.length} elemento${ids.length === 1 ? "" : "s"} en el visor 3D`
+                      ? `Resaltar ${express_ids.length} elemento${express_ids.length === 1 ? "" : "s"} en el visor 3D`
                       : undefined
                   }
                 >
-                  {data.columnas.map((c) => (
-                    <td key={c} className={styles.td}>
+                  {allColumns.map((c) => (
+                    <td key={c} className={styles.td} data-col={c}>
                       {formatCell(row[c])}
                     </td>
                   ))}
@@ -190,6 +264,38 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
         >
           Copiar CSV
         </button>
+        <div className={styles.addColumnWrap}>
+          <button
+            type="button"
+            className={styles.toolbarBtn}
+            onClick={() => setShowColumnMenu((s) => !s)}
+            disabled={addableProperties.length === 0}
+            aria-haspopup="menu"
+            aria-expanded={showColumnMenu}
+            title={
+              addableProperties.length === 0
+                ? "No hay más propiedades para agregar"
+                : "Agregar columna desde las propiedades disponibles del modelo"
+            }
+          >
+            + Agregar columna
+          </button>
+          {showColumnMenu && addableProperties.length > 0 && (
+            <div role="menu" className={styles.columnMenu}>
+              {addableProperties.map((prop) => (
+                <button
+                  key={prop}
+                  type="button"
+                  role="menuitem"
+                  className={styles.columnMenuItem}
+                  onClick={() => addColumn(prop)}
+                >
+                  {prop}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <input
           type="search"
           className={styles.search}

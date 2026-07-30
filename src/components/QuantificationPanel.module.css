@@ -147,14 +147,80 @@
   outline-offset: -2px;
 }
 
+/* Boss #14917: × button on user-added column headers to remove them. */
+.removeColBtn {
+  background: transparent;
+  border: 0;
+  color: var(--ff-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 4px;
+  margin-left: 2px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-family: inherit;
+}
+
+.removeColBtn:hover {
+  background: var(--ff-bg-hover);
+  color: var(--ff-text-primary);
+}
+
+/* Add column button + dropdown menu. */
+.addColumnWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.columnMenu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--ff-bg-panel);
+  border: 1px solid var(--ff-border);
+  border-radius: var(--ff-radius-control);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  z-index: 5;
+  padding: 4px 0;
+}
+
+.columnMenuItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--ff-text-primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.columnMenuItem:hover {
+  background: var(--ff-blue-active);
+  color: #fff;
+}
+
 .td {
   padding: 6px 12px;
   border-bottom: 1px solid var(--ff-divider);
   color: var(--ff-text-primary);
-  max-width: 320px;
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Boss #14917: narrower first column ("Nombre") by default — was 320px
+ * which made the rest of the table hard to see. Cap explicitly so the
+ * user can see multiple columns side-by-side. */
+.td:first-child,
+.th:first-child {
+  max-width: 220px;
 }
 
 .emptyCell {

@@ -12,7 +12,10 @@ export interface QuantificationTable {
   titulo: string;
   /** Column labels, in display order. <= 24 chars each. */
   columnas: string[];
-  /** Rows keyed by column label. Values are scalars. */
+  /** Rows keyed by column label. Values are scalars. Boss #14917:
+   *  rows carry ALL top-level properties of each BIM element, not
+   *  just the agent-chosen columns — the UI can add columns at runtime
+   *  via available_properties without re-querying. */
   filas: Array<Record<string, string | number | boolean>>;
   /**
    * Parallel array of BIM element ids per row — filas_express_ids[i]
@@ -23,6 +26,13 @@ export interface QuantificationTable {
    * ids for a grouping bucket.
    */
   filas_express_ids?: number[][];
+  /**
+   * Properties available for the user to add as columns at runtime
+   * (Boss #14917). Computed at build time from the source rows minus
+   * the ones the agent already chose. Powers the "Agregar columna"
+   * dropdown in QuantificationPanel.
+   */
+  available_properties?: string[];
   /** Source corpus the table was computed from. */
   fuente: TableFuente;
   /** ISO 8601 timestamp the table was generated. */

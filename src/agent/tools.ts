@@ -150,11 +150,28 @@ function getBimElements(): Array<Record<string, unknown>> {
   return Array.isArray(env) ? env : (env.elements ?? []);
 }
 
-function projectRow(
+/**
+ * Project every top-level property of a BIM element into a flat row.
+ * Used by `buildTabla` so the UI can add columns at runtime
+ * (Boss #14917) without re-querying — the data is already there.
+ *
+ * Two-pass projection:
+ *  1. The agent's chosen columns go into the row under their
+ *     Spanish label keys (so the panel can do `row["Nombre"]`
+ *     without re-resolving the label→property map on every render).
+ *  2. Every OTHER top-level property is added under its raw key
+ *     so the "Agregar columna" dropdown has the full inventory to
+ *     offer. Skips ifc_class (metadata, not a column users want).
+ *
+ * The trailing `:NNN` (express_id) is stripped from any `name`
+ * value — Boss #14917 wants the table display clean.
+ */
+function projectRowFull(
   row: Record<string, unknown>,
   columns: string[],
 ): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = {};
+  // Pass 1 — agent's columns, keyed by label.
   for (const col of columns) {
     const key = resolveColumnKey(col);
     if (!key) {
@@ -162,12 +179,49 @@ function projectRow(
       continue;
     }
     const v = row[key];
-    if (v === null || v === undefined) out[col] = "—";
-    else if (typeof v === "boolean") out[col] = v ? "sí" : "no";
-    else if (typeof v === "number" || typeof v === "string") out[col] = v;
-    else out[col] = JSON.stringify(v);
+    let value: string | number | boolean;
+    if (v === null || v === undefined) value = "—";
+    else if (typeof v === "boolean") value = v ? "sí" : "no";
+    else if (typeof v === "number" || typeof v === "string") value = v;
+    else value = JSON.stringify(v);
+    if (key === "name" && typeof value === "string") {
+      value = value.replace(/:[\d]+$/, "");
+    }
+    out[col] = value;
+  }
+  // Pass 2 — every other top-level property under its raw key.
+  for (const [k, v] of Object.entries(row)) {
+    if (k === "ifc_class") continue;
+    if (out[k] !== undefined) continue; // already projected by label pass
+    let value: string | number | boolean;
+    if (v === null || v === undefined) value = "—";
+    else if (typeof v === "boolean") value = v ? "sí" : "no";
+    else if (typeof v === "number" || typeof v === "string") value = v;
+    else value = JSON.stringify(v);
+    if (k === "name" && typeof value === "string") {
+      value = value.replace(/:[\d]+$/, "");
+    }
+    out[k] = value;
   }
   return out;
+}
+
+/**
+ * Build the available_properties list: every scalar key present in
+ * the data minus the ones the agent already chose. Used to power
+ * the "Agregar columna" dropdown in QuantificationPanel.
+ */
+function computeAvailableProperties(
+  rows: Array<Record<string, string | number | boolean>>,
+  displayedColumns: string[],
+): string[] {
+  const keys = new Set<string>();
+  for (const r of rows) {
+    for (const k of Object.keys(r)) {
+      if (!displayedColumns.includes(k)) keys.add(k);
+    }
+  }
+  return [...keys].sort();
 }
 
 function defaultTitulo(spec: TablaSpec, count: number): string {
@@ -203,20 +257,24 @@ export function buildTabla(
   if (spec.agrupar_por && spec.agrupar_por.length > 0) {
     // Bucket per group key + collect every express_id in the bucket
     // so a row click in the UI can highlight all matching elements.
-    const buckets = new Map<string, { count: number; ids: number[] }>();
+    const buckets = new Map<string, { count: number; ids: number[]; sample: Record<string, unknown> }>();
     for (const r of rows) {
       const key = spec.agrupar_por
         .map((g) => (r[g] === null || r[g] === undefined ? "—" : String(r[g])))
         .join(" · ");
-      const bucket = buckets.get(key) ?? { count: 0, ids: [] };
+      const bucket = buckets.get(key) ?? { count: 0, ids: [], sample: r };
       bucket.count += 1;
       if (typeof r.express_id === "number") bucket.ids.push(r.express_id);
       buckets.set(key, bucket);
     }
     const filas: Array<Record<string, string | number | boolean>> = [];
     const filas_express_ids: number[][] = [];
+    const groupingKeys = [...spec.agrupar_por, "Cantidad"];
     for (const [key, bucket] of buckets) {
-      const row: Record<string, string | number | boolean> = {};
+      // Boss #14917: project ALL properties from the sample element
+      // so the UI can add columns at runtime. Group key columns and
+      // Cantidad overwrite the projected values below.
+      const row = projectRowFull(bucket.sample, groupingKeys);
       const parts = key.split(" · ");
       spec.agrupar_por.forEach((g, i) => {
         row[g] = parts[i] ?? "—";
@@ -228,9 +286,10 @@ export function buildTabla(
     filas.sort((a, b) => Number(b["Cantidad"]) - Number(a["Cantidad"]));
     return {
       titulo: spec.titulo ?? defaultTitulo(spec, filas.length),
-      columnas: [...spec.agrupar_por, "Cantidad"],
+      columnas: groupingKeys,
       filas,
       filas_express_ids,
+      available_properties: computeAvailableProperties(filas, groupingKeys),
       fuente: "modelo",
       generadaEn: new Date().toISOString(),
     };
@@ -238,11 +297,19 @@ export function buildTabla(
   if (!spec.columnas || spec.columnas.length === 0) return undefined;
   const validColumns = spec.columnas.filter((c) => resolveColumnKey(c) !== null);
   if (validColumns.length === 0) return undefined;
-  const filas = rows.map((r) => projectRow(r, validColumns));
+  // Boss #14917: project ALL top-level properties into each row so
+  // the UI can add columns at runtime. The `columnas` array drives
+  // display order only; `available_properties` lets the user pick extras.
+  const filas_express_ids: number[][] = rows.map((r) =>
+    typeof r.express_id === "number" ? [r.express_id] : [],
+  );
+  const filas = rows.map((r) => projectRowFull(r, validColumns));
   return {
     titulo: spec.titulo ?? defaultTitulo(spec, filas.length),
     columnas: validColumns,
     filas,
+    filas_express_ids,
+    available_properties: computeAvailableProperties(filas, validColumns),
     fuente: "modelo",
     generadaEn: new Date().toISOString(),
   };

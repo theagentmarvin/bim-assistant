@@ -60,11 +60,16 @@ export async function runAgentLoop(
     }
     const parts = candidate.content?.parts ?? [];
     // Append the model's turn to history so the next iteration has it.
+    // Preserve thoughtSignature on every part — Gemini v1beta requires
+    // it on functionCall parts for the conversation to continue across
+    // turns. Dropping it triggers HTTP 400 "Function call is missing a
+    // thought_signature in functionCall parts".
     contents.push({
       role: "model",
       parts: parts.map((p) => ({
         text: p.text,
         functionCall: p.functionCall,
+        thoughtSignature: p.thoughtSignature,
       })),
     });
     const functionCalls = parts.filter((p) => p.functionCall).map((p) => p.functionCall!);
@@ -95,13 +100,22 @@ export async function runAgentLoop(
         functionResponse: { name: fc.name, response: payload },
       });
     }
-    contents.push({ role: "function", parts: responseParts });
+    // Gemini v1beta (gemini-flash-latest and newer) accepts function
+    // responses only as `role: "user"` with parts[].functionResponse.
+    // The legacy `role: "function"` is rejected with HTTP 400
+    // ("Role 'function' is not supported"). Verified 2026-07-30 with
+    // Boss's AQ. token — the new format is required.
+    contents.push({ role: "user", parts: responseParts });
   }
   // If we exit the loop without a final answer, force one synthesis turn
   // by asking Gemini to wrap up with the gathered evidence.
   if (!finalText) {
+    // Collect function-call results from any turn. We previously
+    // filtered by `c.role === "function"`, but the current Gemini v1beta
+    // API stores function responses under `role: "user"` (legacy
+    // `"function"` role returns HTTP 400). Filter on the part shape
+    // instead — robust across both old and new API formats.
     const summary = contents
-      .filter((c) => c.role === "function")
       .flatMap((c) =>
         c.parts
           .filter((p) => p.functionResponse)

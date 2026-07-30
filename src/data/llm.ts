@@ -34,13 +34,21 @@ const FIREWORKS_EMBED_MODEL = "fireworks/qwen3-embedding-8b";
 const EMBEDDING_DIM = 1024;
 
 export interface GeminiContent {
-  role: "user" | "model" | "function";
+  // Function responses also come back as "user" in the current Gemini
+  // v1beta API (legacy "function" role returns HTTP 400).
+  role: "user" | "model";
   parts: Array<{
     text?: string;
     // Function-call parts emitted by the model.
     functionCall?: { name: string; args: Record<string, unknown> };
     // Function-response parts (we send these back to Gemini).
     functionResponse?: { name: string; response: Record<string, unknown> };
+    // Gemini v1beta (gemini-2.5+, gemini-flash-latest) attaches a
+    // thoughtSignature to each functionCall part to preserve the
+    // model's internal reasoning across turns. Stripping it triggers
+    // HTTP 400 "Function call is missing a thought_signature". The
+    // signature must round-trip verbatim — opaque base64.
+    thoughtSignature?: string;
   }>;
 }
 
@@ -54,6 +62,12 @@ export interface GeminiRequest {
 export interface GeminiResponsePart {
   text?: string;
   functionCall?: { name: string; args: Record<string, unknown> };
+  // Gemini v1beta (gemini-2.5+, gemini-flash-latest) returns a
+  // thoughtSignature on every functionCall part. Round-trip it back
+  // in subsequent turns — stripping it triggers HTTP 400
+  // "Function call is missing a thought_signature in functionCall parts".
+  // Opaque base64 string; do not interpret.
+  thoughtSignature?: string;
 }
 
 export interface GeminiResponseCandidate {

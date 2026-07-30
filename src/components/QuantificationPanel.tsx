@@ -56,6 +56,13 @@ interface Props {
    *  that the row represents (one element for listing rows, many for
    *  grouping rows). The handler routes these to the viewer highlight. */
   onRowSelect?: (ids: number[]) => void;
+  /** Index of the currently-selected row in the original
+   *  `data.filas_express_ids` array. Set by row click OR by a 3D
+   *  element click (bidirectional sync with the model). The matching
+   *  row gets the .rowSelected class and is scrolled into view.
+   *  Compared via express_ids (not the index) so the highlight
+   *  survives sort and filter changes. */
+  selectedRowIndex?: number | null;
 }
 
 type SortDir = "asc" | "desc" | null;
@@ -65,7 +72,7 @@ interface RowMeta {
   express_ids: number[];
 }
 
-export default function QuantificationPanel({ data, onRowSelect }: Props) {
+export default function QuantificationPanel({ data, onRowSelect, selectedRowIndex }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
@@ -211,6 +218,28 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
     }
   }, [data, allColumns, rowsWithMeta]);
 
+  // Boss 2026-07-30 17:48 — resolve the selected row's express_ids
+  // from the original index. The highlight comparison below uses the
+  // ids (not the index) so the selection survives sort and filter.
+  const selectedRowIds = useMemo<number[] | null>(() => {
+    if (selectedRowIndex === null || selectedRowIndex === undefined || !data) return null;
+    return data.filas_express_ids?.[selectedRowIndex] ?? null;
+  }, [selectedRowIndex, data]);
+
+  // Boss 2026-07-30 17:48 — scroll the selected row into view when
+  // selectedRowIndex changes (typically via 3D element click). The
+  // row is found via its data-row-ids attribute (the express_ids).
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedRowIds === null || selectedRowIds.length === 0) return;
+    const rowEl = tableWrapRef.current?.querySelector(
+      `[data-row-ids="${selectedRowIds.join(",")}"]`,
+    );
+    if (rowEl) {
+      rowEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [selectedRowIds]);
+
   if (!data) {
     return (
       <div className={styles.empty}>
@@ -281,7 +310,7 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
           {filteredCount !== totalRows && ` · ${filteredCount} visibles`}
         </div>
       </header>
-      <div className={styles.tableWrap}>
+      <div className={styles.tableWrap} ref={tableWrapRef}>
         <table className={styles.table}>
           <thead>
             <tr>
@@ -344,10 +373,19 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
             )}
             {rowsWithMeta.map(({ row, express_ids }, i) => {
               const clickable = express_ids.length > 0 && !!onRowSelect;
+              const isSelected = selectedRowIds !== null &&
+                express_ids.length === selectedRowIds.length &&
+                express_ids.every((id) => selectedRowIds.includes(id));
+              const rowClass = [
+                styles.row,
+                clickable ? styles.rowClickable : "",
+                isSelected ? styles.rowSelected : "",
+              ].filter(Boolean).join(" ");
               return (
                 <tr
                   key={i}
-                  className={`${styles.row}${clickable ? ` ${styles.rowClickable}` : ""}`}
+                  data-row-ids={express_ids.join(",")}
+                  className={rowClass}
                   onClick={clickable ? () => onRowSelect!(express_ids) : undefined}
                   onKeyDown={
                     clickable
@@ -361,6 +399,7 @@ export default function QuantificationPanel({ data, onRowSelect }: Props) {
                   }
                   tabIndex={clickable ? 0 : -1}
                   role={clickable ? "button" : undefined}
+                  aria-selected={isSelected || undefined}
                   aria-label={
                     clickable
                       ? `Resaltar ${express_ids.length} elemento${express_ids.length === 1 ? "" : "s"} en el visor 3D`

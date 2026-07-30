@@ -177,6 +177,21 @@
   outline-offset: -2px;
 }
 
+/* Boss 2026-07-30 17:48 — selected row (synced from row click or
+   3D element click). Light orange tint + blue outline so the row
+   is clearly marked but the underlying content stays readable.
+   The outline-offset keeps the overlay inside the row so it doesn't
+   overlap adjacent rows. */
+.rowSelected {
+  background: rgba(255, 107, 0, 0.18);
+  outline: 2px solid var(--ff-blue-active);
+  outline-offset: -2px;
+}
+
+.rowSelected .td {
+  color: var(--ff-text-primary);
+}
+
 /* Boss #14917: × button on user-added column headers to remove them. */
 .removeColBtn {
   background: transparent;

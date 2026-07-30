@@ -136,6 +136,12 @@ export default function App() {
   // Latest structured table from the agent. Renders inside the
   // Cuantificación tab. Replaced on each new arrival.
   const [latestTable, setLatestTable] = useState<QuantificationTable | null>(null);
+  // Boss 2026-07-30 17:48 — synchronize selection between the
+  // cuantificación table and the 3D model. Tracks which row is
+  // currently selected (set by row click OR 3D element click). The
+  // panel highlights this row; Viewer3D uses the corresponding row's
+  // express_ids as the userSelectionFilter (yellow tint).
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
 
   // ----- PDF viewer state -----
   const [pdfPage, setPdfPage] = useState(1);
@@ -281,8 +287,17 @@ export default function App() {
   // grouping rows this fans out to every element in the bucket.
   // Boss clarification 2026-07-30 17:26: the highlight is for user
   // clicks only; the agent filter still isolates.
+  //
+  // Boss 2026-07-30 17:48 — also set selectedRowIndex so the row in
+  // the table is highlighted (the panel mirrors the click). The
+  // index is looked up by matching the row's express_ids against
+  // latestTable.filas_express_ids.
   const handleRowSelect = useCallback((ids: number[]) => {
     if (ids.length === 0) return;
+    const rowIndex = latestTable?.filas_express_ids?.findIndex(
+      rowIds => rowIds.length === ids.length && rowIds.every(id => ids.includes(id)),
+    ) ?? -1;
+    setSelectedRowIndex(rowIndex !== -1 ? rowIndex : null);
     const filter: Filter = {
       c: "AND",
       g: [
@@ -297,7 +312,7 @@ export default function App() {
       ],
     };
     setUserSelectionFilter(filter);
-  }, []);
+  }, [latestTable]);
 
   // ----- Send handler -----
 
@@ -386,11 +401,50 @@ export default function App() {
   }, []);
 
   // ----- 3D element click -----
+  // Boss 2026-07-30 17:48 — when the user clicks an element in the
+  // 3D model, find the matching row in the cuantificación table and
+  // highlight it (selectedRowIndex). If the element is in the table,
+  // also update userSelectionFilter so the model's yellow tint
+  // matches the row's elements — bidirectional sync between table
+  // and model. On white space click (empty ifcClass), clear the row
+  // selection but keep userSelectionFilter.
   const handleElementClick = useCallback((data: ElementClickData) => {
     if (!data.ifcClass) {
       setSelectedElement(null);
+      setSelectedRowIndex(null);
+      return;
     }
-  }, []);
+    if (latestTable?.filas_express_ids) {
+      const rowIndex = latestTable.filas_express_ids.findIndex(
+        ids => Array.isArray(ids) && ids.includes(data.expressID),
+      );
+      if (rowIndex !== -1) {
+        setSelectedRowIndex(rowIndex);
+        const rowIds = latestTable.filas_express_ids[rowIndex];
+        const filter: Filter = {
+          c: "AND",
+          g: [
+            {
+              c: "OR",
+              r: rowIds.map((id) => ({
+                p: "express_id",
+                op: "equals",
+                v: String(id),
+              })),
+            },
+          ],
+        };
+        setUserSelectionFilter(filter);
+      } else {
+        // Element not in the table — clear row selection but keep
+        // the existing userSelectionFilter (the user might have
+        // selected a row before clicking elsewhere).
+        setSelectedRowIndex(null);
+      }
+    } else {
+      setSelectedRowIndex(null);
+    }
+  }, [latestTable]);
   const handleElementData = useCallback((data: ElementProperties) => {
     setSelectedElement(data);
   }, []);
@@ -419,6 +473,13 @@ export default function App() {
       // Error already surfaced via onProgress.
     });
   }, []);
+
+  // Reset the table row selection when the table is generated,
+  // replaced, or cleared (handleReset sets it to null). Saves each
+  // tool callback from having to clear it themselves.
+  useEffect(() => {
+    setSelectedRowIndex(null);
+  }, [latestTable]);
 
   const handleReindex = useCallback(() => {
     forceReindex((e) => {
@@ -499,6 +560,7 @@ export default function App() {
               <QuantificationPanel
                 data={latestTable}
                 onRowSelect={handleRowSelect}
+                selectedRowIndex={selectedRowIndex}
               />
             }
           />

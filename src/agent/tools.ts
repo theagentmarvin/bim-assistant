@@ -179,7 +179,7 @@ const COLUMN_LABEL_TO_KEY: Record<string, string> = {
  * "Qto_WallBaseQuantities.GrossVolume" without hardcoding every
  * class-specific prefix. Added 2026-07-30 (task-psets-flattening).
  */
-function getScalarTopLevelKeys(
+export function getScalarTopLevelKeys(
   rows: Array<Record<string, unknown>>,
 ): string[] {
   const keys = new Set<string>();
@@ -218,7 +218,7 @@ function getScalarTopLevelKeys(
  * The `availableColumns` argument is optional. When omitted the
  * function falls back to map lookup + snake_case (legacy behavior).
  */
-function resolveColumnKey(
+export function resolveColumnKey(
   label: string,
   availableColumns?: string[],
 ): string | null {
@@ -271,7 +271,7 @@ function resolveColumnKey(
  * lookups, so any resolution to a nested key (e.g. "largo" →
  * "geometry_summary.length_m") silently returned undefined.
  */
-function getPropertyByPath(row: Record<string, unknown>, path: string): unknown {
+export function getPropertyByPath(row: Record<string, unknown>, path: string): unknown {
   if (Object.prototype.hasOwnProperty.call(row, path)) {
     return row[path];
   }

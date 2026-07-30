@@ -90,6 +90,32 @@
   flex-direction: column;
   background: var(--ff-bg-app);
   border-right: 1px solid var(--ff-border);
+  /* Boss #14917 (follow-up): anchor for the absolutely-positioned
+   * splitter handle on the right edge. */
+  position: relative;
+}
+
+/* Boss #14917 (follow-up): drag handle on the right edge of the
+ * cuantificación panel. 6px wide, centered on the column boundary
+ * so it's easy to grab. The visual cue is a faint blue line on hover
+ * or active drag — invisible at rest so it doesn't clutter the UI. */
+.splitter {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 120ms ease;
+  touch-action: none;
+}
+
+.splitter:hover,
+.splitter:active {
+  background: var(--ff-blue-active);
+  opacity: 0.5;
 }
 
 .center {

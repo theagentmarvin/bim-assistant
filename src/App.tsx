@@ -39,8 +39,70 @@ import styles from "./App.module.css";
 
 const MODEL_ID_DEFAULT_IFC_CLASS: string | null = null;
 
+// Boss #14917 (follow-up): user-resizable cuantificación panel width.
+// Persisted in localStorage. The default mirrors the prior minmax
+// (420px). Min/max clamp prevents the user from squeezing the panel
+// to nothing or pushing the 3D viewer off-screen.
+const PDF_SLOT_WIDTH_KEY = "bim-assistant:pdf-slot-width";
+const PDF_SLOT_WIDTH_DEFAULT = 420;
+const PDF_SLOT_WIDTH_MIN = 280;
+const PDF_SLOT_WIDTH_MAX = 1000;
+
 export default function App() {
   const { mappings } = useMemo(() => loadMappings(), []);
+
+  // Boss #14917 (follow-up): resize state for the cuantificación
+  // panel (column #2). Persists across reloads.
+  const [pdfSlotWidth, setPdfSlotWidth] = useState<number>(() => {
+    try {
+      const raw = window.localStorage.getItem(PDF_SLOT_WIDTH_KEY);
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        if (
+          typeof parsed === "number" &&
+          parsed >= PDF_SLOT_WIDTH_MIN &&
+          parsed <= PDF_SLOT_WIDTH_MAX
+        ) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return PDF_SLOT_WIDTH_DEFAULT;
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PDF_SLOT_WIDTH_KEY, JSON.stringify(pdfSlotWidth));
+    } catch {
+      // ignore
+    }
+  }, [pdfSlotWidth]);
+
+  const startPanelResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = pdfSlotWidth;
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      setPdfSlotWidth(
+        Math.max(
+          PDF_SLOT_WIDTH_MIN,
+          Math.min(PDF_SLOT_WIDTH_MAX, startWidth + delta),
+        ),
+      );
+    };
+
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [pdfSlotWidth]);
 
   // ----- 3D viewer state -----
   // We expose Viewer3D's filter/IFC class via the ViewerPane's
@@ -387,7 +449,15 @@ export default function App() {
             : undefined
         }
       />
-      <main className={styles.body}>
+      <main
+        className={styles.body}
+        style={{
+          // Boss #14917 (follow-up): inline grid-template-columns
+          // so the cuantificacion panel width is user-controlled. The
+          // other three columns keep their minmax cap from the CSS.
+          gridTemplateColumns: `minmax(300px, 340px) ${pdfSlotWidth}px minmax(420px, 1fr) minmax(260px, 320px)`,
+        }}
+      >
         <aside className={styles.left}>
           <ChatPanel
             messages={messages}
@@ -419,6 +489,14 @@ export default function App() {
                 onRowSelect={handleRowSelect}
               />
             }
+          />
+          <div
+            className={styles.splitter}
+            onMouseDown={startPanelResize}
+            role="separator"
+            aria-label="Ajustar ancho del panel de cuantificación"
+            aria-orientation="vertical"
+            title="Arrastrar para ajustar ancho"
           />
         </section>
         <section className={styles.center}>

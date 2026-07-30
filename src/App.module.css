@@ -1,0 +1,99 @@
+.shell {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  height: 100vh;
+  background: var(--ff-bg-app);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--ff-header-height);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ff-border);
+  background: var(--ff-bg-app);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo {
+  width: 32px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ff-text-primary);
+  line-height: 1.2;
+}
+
+.subtitle {
+  font-size: 11px;
+  color: var(--ff-text-secondary);
+  line-height: 1.2;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metaPill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 11px;
+  background: var(--ff-bg-panel);
+  color: var(--ff-text-secondary);
+  font-size: 11px;
+  border: 1px solid var(--ff-border);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(320px, 360px) 1fr minmax(260px, 320px);
+  min-height: 0;
+  height: 100%;
+}
+
+.left {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.center {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 1px;
+  background: var(--ff-border);
+}
+
+.right {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--ff-border);
+}
+
+.pdfSlot {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ff-bg-app);
+}

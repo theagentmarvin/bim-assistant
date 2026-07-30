@@ -1,0 +1,64 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--ff-border);
+  background: var(--ff-bg-panel);
+  color: var(--ff-text-secondary);
+  min-height: 28px;
+  flex-shrink: 0;
+}
+
+.bar[data-kind="indexing"] {
+  color: var(--ff-text-primary);
+  background: var(--ff-brand-surface);
+}
+.bar[data-kind="ready"] {
+  color: var(--ff-tag-arq-text);
+  background: var(--ff-tag-arq-bg);
+}
+.bar[data-kind="error"] {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.progressTrack {
+  flex: 1;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-left: 8px;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  background: var(--ff-blue-active);
+  transition: width 120ms ease;
+}
+
+.reindexBtn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: var(--ff-radius-control);
+  padding: 2px 10px;
+  font-size: 11px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.reindexBtn:hover {
+  background: rgba(255, 255, 255, 0.5);
+}

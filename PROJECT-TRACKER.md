@@ -120,6 +120,80 @@ out. This is a major scope-down from the research report.
 - ❌ Authentication / sharing / multi-tenant
 - ❌ OCR pipeline (pdfjs runtime text extraction only)
 - ❌ Firebase deployment / Firestore / hosting
+- ❌ Tool breadth beyond 3 (`get_element_details`, `list_sections`,
+  `compare`, `get_model_stats`, `export_session` deferred to v1.1)
+- ❌ Corrections feedback loop
+- ❌ OpenRouter DeepSeek V3 judge
+
+### PoC tool surface (3 tools only — Spanish names)
+
+- ✅ `consultar_base_de_conocimiento(pregunta, fuente)` — RAG over
+  model + spec + mapping corpora.
+- ✅ `resaltar_elementos(clase_ifc | seccion_id | filtro | reset)` —
+  reuses `Viewer3D.tsx` isolation + Highlighter pipeline.
+- ✅ `abrir_seccion_pdf(seccion_id | consulta | pagina)` — reuses
+  `PdfViewer.tsx` page navigation + a sectionIdToPage heuristic.
+
+### RAG strategy (replaces OCR-markdown chunks)
+
+- **Model corpus** — `data/bim_elements.json` chunked by `ifc_class`,
+  embedded via `fireworks/qwen3-embedding-8b` at app boot, cached in
+  IndexedDB.
+- **Mapping corpus** — `data/mapping_presets.json` chunked per section.
+- **Spec corpus** — pdfjs runtime text extraction on app boot,
+  page-level chunks, embedded.
+- **No reranker for PoC.** Cosine similarity only, top-K=5.
+
+### GitHub repo
+
+- Repo: `theagentmarvin/bim-assistant` (public).
+- Initial commit: planning artifacts (this tracker + research + spec).
+- Subsequent commits per workspace sub-agent commit policy:
+  sub-agents leave work uncommitted; Architect reviews + commits.
+
+## Next action
+
+- This turn: `.gitignore` + `.claude/specs/task-poc-v1.md`.
+- This turn: `git init -b main` + first commit + `gh repo create` + push.
+- This turn: dispatch `webdev-marvin` sub-agent with the spec.
+- Architect reviews the diff, runs gates, commits, reports to Boss.
+
+## PoC scope lock (Boss 2026-07-30 14:05)
+
+Boss reframed v1 as a **PoC — top-priority functionality only**. The
+research's "go-wide" instinct rescoped; cost and clash are explicitly
+out. This is a major scope-down from the research report.
+
+### Locked decisions (Boss answers to research open questions)
+
+- **(A) API key management** — env vars (`.env.local`, git-ignored,
+  `VITE_GEMINI_API_KEY` + `VITE_FIREWORKS_API_KEY`). No Cloud Function
+  proxy. PoC simplicity over hardening.
+- **(B) Multi-IFC** — single IFC for PoC. Multi-IFC is an upcoming
+  stage.
+- **(C) Spanish-only** — all UI strings, system prompts, tool
+  descriptions, agent responses, error messages are in Spanish. No
+  bilingual UI. Users are Spanish-speaking reviewers.
+- **(D partial) PDF source** — NO OCR pipeline. Use pdfjs runtime
+  text extraction from the existing `eett-c.pdf`. The bim-specs-mapper
+  `PdfViewer.tsx` is reused as-is. RAG corpus is `bim_elements.json`
+  + `mapping_presets.json` + runtime-extracted PDF text.
+- **(D partial) Shell layout** — same split-view logic from
+  bim-specs-mapper (PDF left, 3D viewer center, properties panel
+  right). Chat panel added as the primary surface (left rail).
+- **(D partial) Deployment** — local-only. `npm run dev` from the
+  repo. NO Firebase, no `firebase.json`, no `.firebaserc`. GitHub
+  repo for source control: `theagentmarvin/bim-assistant` (public).
+
+### Explicit out-of-scope for PoC
+
+- ❌ Cost estimation
+- ❌ Clash queries
+- ❌ Multi-IFC navigation
+- ❌ Bilingual UI (Spanish only)
+- ❌ Authentication / sharing / multi-tenant
+- ❌ OCR pipeline (pdfjs runtime text extraction only)
+- ❌ Firebase deployment / Firestore / hosting
 - ❌ Tool breadth beyond 3 — `get_element_details`, `list_sections`,
   `compare`, `get_model_stats`, `export_session` all deferred to v1.1
 - ❌ Corrections feedback loop

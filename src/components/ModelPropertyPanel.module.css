@@ -1,0 +1,181 @@
+/* ModelPropertyPanel.module.css — flat vertical key-value property panel (Dalux-style). */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--ff-bg-panel);
+  height: 100%;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.header {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  background: var(--ff-bg-app);
+  border-bottom: 1px solid var(--ff-border);
+}
+
+.headerTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.ifcClass {
+  font-family: var(--ff-font-stack);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ff-blue-active);
+  background: var(--ff-brand-surface);
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+
+.expressId {
+  font-size: 11px;
+  color: var(--ff-text-muted);
+  font-family: var(--ff-font-stack);
+}
+
+.name {
+  font-size: 12px;
+  color: var(--ff-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--ff-bg-app);
+}
+
+.section {
+  margin-bottom: 4px;
+}
+
+.sectionLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ff-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 12px;
+  background: var(--ff-bg-panel);
+  border-bottom: 1px solid var(--ff-border);
+  border-top: 1px solid var(--ff-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sectionCount {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ff-text-muted);
+  background: var(--ff-bg-app);
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--ff-border);
+}
+
+/* Flat key-value list — Dalux-style 2-column table.
+ *
+ * Column split: key takes a small fixed slice (110px), value gets the
+ * rest via `minmax(0, 1fr)` so wrapped text can use the full remainder
+ * instead of overflowing the grid cell. */
+
+.kvList {
+  padding: 2px 0;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 14px;
+  padding: 5px 12px;
+  font-size: 11px;
+  align-items: baseline;
+  line-height: 1.45;
+}
+
+.kv:hover {
+  background: var(--ff-brand-surface);
+}
+
+.kvKey {
+  color: var(--ff-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.kvValue {
+  font-family: var(--ff-font-stack);
+  color: var(--ff-text-primary);
+  text-align: left;
+  overflow-wrap: break-word;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+/* Inline Pset/Qto group label — small italic marker above first row of each group. */
+
+.groupLabel {
+  font-size: 10px;
+  font-style: italic;
+  color: var(--ff-blue-active);
+  padding: 6px 12px 2px;
+  letter-spacing: 0.02em;
+  border-top: 1px dashed var(--ff-divider);
+}
+
+.groupLabel:first-child {
+  border-top: none;
+}
+
+.empty {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--ff-text-muted);
+  font-style: italic;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--ff-text-muted);
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.placeholderIcon {
+  font-size: 28px;
+  opacity: 0.3;
+}
+
+.placeholderTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ff-text-primary);
+}
+
+.placeholderText {
+  font-size: 11px;
+  color: var(--ff-text-muted);
+  max-width: 240px;
+  line-height: 1.4;
+}

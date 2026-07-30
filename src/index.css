@@ -1,0 +1,11 @@
+@import './styles/tokens.css';
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  font-family: var(--ff-font-stack);
+  font-size: var(--ff-font-size-base);
+  color: var(--ff-text-primary);
+  background: var(--ff-bg-app);
+}

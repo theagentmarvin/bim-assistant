@@ -1,0 +1,126 @@
+/* src/styles/tokens.css
+ *
+ * CSS custom properties for the Free Field UI. Source of truth is
+ * docs/STYLING.md. Values must match the spec EXACTLY.
+ *
+ * Imported from src/styles/global.css. The :root selector is what
+ * makes these available everywhere.
+ */
+
+:root {
+  /* ---------- §1. Color Tokens ---------- */
+  --ff-bg-app: #ffffff;
+  --ff-bg-panel: #f0f0f0;
+  --ff-bg-hover: #f9fafb;
+  --ff-border: #e5e7eb;
+  --ff-divider: #f3f4f6;
+  --ff-text-primary: #374151;
+  --ff-text-muted: #9ca3af;
+  /* SalfaCorp brand: burgundy red (APS Web Tools BRAND.md, 2026-07-26) */
+  --ff-blue-active: #A32428;
+  --ff-brand-light: #B44E51;
+  --ff-brand-surface: #F6E9E9;
+  --ff-brand-bg: #FEFEFE;
+  --ff-tag-arq-bg: #dcfce7;
+  --ff-tag-arq-text: #15803d;
+  --ff-tag-section-bg: #fef3c7;
+  --ff-tag-section-text: #b45309;
+  --ff-pdf-icon: #dc2626;
+  --ff-ifc-icon: #7c3aed;
+  --ff-badge-bg: #e5e7eb;
+  --ff-drag-handle: #d1d5db;
+  --ff-measurement: #facc15;
+  --ff-text-measurement: #1a1a1a;
+
+  /* ---------- §2. Typography ---------- */
+  --ff-font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  --ff-font-size-base: 14px;
+
+  /* ---------- §3. Layout ---------- */
+  --ff-sidebar-width: 420px;
+  --ff-header-height: 48px;
+
+  /* ---------- §4. Header ---------- */
+  /* (window chrome removed 2026-06-01 per Boss — right edge empty) */
+
+  /* ---------- §5. Tabs ---------- */
+  --ff-tab-height: 40px;
+  --ff-tab-active-underline: 2px;
+
+  /* ---------- §6. File Rows ---------- */
+  --ff-row-height: 44px;
+  --ff-row-px: 16px;
+
+  /* ---------- §7. Tag Pills ---------- */
+  --ff-tag-radius: 4px;
+  --ff-tag-py: 2px;
+  --ff-tag-px: 8px;
+  --ff-tag-font-size: 11px;
+  --ff-tag-font-weight: 600;
+  --ff-tag-letter-spacing: 0.03em;
+
+  /* ---------- §8. Section Badges ---------- */
+  --ff-badge-radius: 12px;
+  --ff-badge-py: 1px;
+  --ff-badge-px: 7px;
+  --ff-badge-font-size: 11px;
+
+  /* ---------- §9. Section Group Headers ---------- */
+  --ff-section-header-py: 12px;
+  --ff-section-header-px: 16px;
+  --ff-section-header-transition: 150ms ease;
+
+  /* ---------- §10. Icons ---------- */
+  --ff-icon-pdf-size: 20px;
+  --ff-icon-ifc-size: 20px;
+  --ff-icon-drag-size: 16px;
+
+  /* ---------- §11. Viewer Panel ---------- */
+  --ff-measurement-label-size: 13px;
+  --ff-measurement-label-weight: 500;
+  --ff-compass-size: 48px;
+
+  /* ---------- Drop shadow (measurement label) ---------- */
+  --ff-measurement-label-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+
+  /* ---------- Z-index ---------- */
+  --ff-z-overlay: 100;
+  --ff-z-popover: 200;
+  --ff-z-modal: 300;
+  --ff-z-stats: 10;
+
+  /* ---------- §12. Main App chrome (added with Models module) ---------- */
+  --ff-left-rail-width: 64px;
+  --ff-sidebar-min-width: 280px;
+  --ff-sidebar-max-width-pct: 50;
+  --ff-bg-canvas: #f2f3f4;
+  --ff-text-secondary: #6b7280;
+  --ff-text-tertiary: #374151;
+  --ff-icon-button-bg: #f1f2f4;
+  --ff-radius-control: 8px;
+  --ff-radius-icon: 4px;
+  --ff-touch-target: 40px;
+
+  /* ---------- §13. Folder chips (added Task 20F) ----------
+   * Per-color palette for the <PdfFolderChip> component. The
+   * chip picks its color token by the folder's stored `color`
+   * field, so users can re-color a folder from the Folders
+   * sub-tab without us touching this file. */
+  --ff-folder-blue-bg: #dbeafe;
+  --ff-folder-blue-text: #1e40af;
+  --ff-folder-green-bg: #dcfce7;
+  --ff-folder-green-text: #166534;
+  --ff-folder-amber-bg: #fef3c7;
+  --ff-folder-amber-text: #92400e;
+  --ff-folder-rose-bg: #ffe4e6;
+  --ff-folder-rose-text: #9f1239;
+  --ff-folder-violet-bg: #ede9fe;
+  --ff-folder-violet-text: #5b21b6;
+  --ff-folder-slate-bg: #e2e8f0;
+  --ff-folder-slate-text: #334155;
+  --ff-folder-radius: 4px;
+  --ff-folder-py: 2px;
+  --ff-folder-px: 8px;
+  --ff-folder-font-size: 11px;
+  --ff-folder-font-weight: 600;
+}

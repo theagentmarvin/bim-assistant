@@ -1,6 +1,6 @@
 # bim-assistant PoC v1 — implementation spec
 
-**Project:** `~/projects/bim/bim-assistant/` · branch `main` · repo `theagentmarvin/bim-assistant`
+**Project:** `~/projects/bim/bim-assistant/` · branch `main` · repo `theagentmarvin/bim-assistant` (public)
 **Brief:** Chat-first "JARVIS for BIM" — Spanish-only PoC over a single IFC + spec PDF.
 **Date:** 2026-07-30
 **Author:** Architect (Marvin)
@@ -9,34 +9,48 @@
 
 A runnable Spanish-first chat surface that:
 
-1. Answers questions about the current IFC model using natural language.
-2. Highlights and isolates matching BIM elements in the 3D viewer.
+1. Answers questions about the current IFC model.
+2. Highlights / isolates matching BIM elements in the 3D viewer.
 3. Opens the relevant page of the spec PDF when the question touches a spec section.
 
-No cost, no clash, no multi-IFC, no bilingual, no auth, no Firebase, no hosting — just the chat layer wired to the existing TOE viewer + pdfjs viewer already living in `bim-specs-mapper`. The chat is the wedge. The 3D + PDF viewers are the substrate it calls into.
+No cost, no clash, no multi-IFC, no bilingual, no auth, no Firebase, no deployment — just the chat layer wired to the existing TOE viewer + pdfjs viewer already living in `bim-specs-mapper`. The chat is the wedge.
+
+## Scope lock (Boss 2026-07-30 14:05)
+
+- **Out (v1 PoC):** cost estimation, clash queries, multi-IFC, bilingual UI, auth, OCR pipeline, Firebase deployment.
+- **(A) API key management** — env vars (`.env.local`, git-ignored, `VITE_GEMINI_API_KEY` + `VITE_FIREWORKS_API_KEY`). No Cloud Function proxy.
+- **(B) Multi-IFC** — single IFC for PoC. Multi-IFC is an upcoming stage.
+- **(C) Spanish-only** — all UI strings, system prompts, tool descriptions, agent responses, error messages in Spanish. No bilingual UI.
+- **(D partial) PDF source** — NO OCR. Use pdfjs runtime text extraction from `eett-c.pdf`. The bim-specs-mapper `PdfViewer.tsx` is reused as-is.
+- **(D partial) Shell layout** — same split-view logic from bim-specs-mapper (PDF left, 3D viewer center, properties panel right). Chat panel added as primary surface (left rail).
+- **(D partial) Deployment** — local-only. `npm run dev` from the repo. No Firebase, no hosting. GitHub repo for source control: `theagentmarvin/bim-assistant`.
 
 ## Architecture (locked)
 
-**App shell.** `App.tsx` keeps the bim-specs-mapper split-view (PDF left, 3D viewer center, properties right) and adds a chat panel as the primary surface. The chat-first principle trumps the existing tabbed review UI: on first paint the chat is visible and the tabbed review is one click away behind a toggle.
+**App shell.** `App.tsx` keeps bim-specs-mapper's split-view (PDF left, 3D viewer center, properties right) and adds a chat panel as the primary surface. On first paint: chat is visible; tabbed review collapses behind a toggle.
 
 **Agent loop.** ReAct on Gemini 2.5 Flash. Three tools. Plain TypeScript state machine: receive user message → call Gemini with the message + tool schemas → if Gemini returns tool calls, execute, append tool-result messages, call Gemini again → when Gemini returns a final text answer, surface it in the chat. Max turns = 4 for PoC budget.
 
 **RAG strategy.** IndexedDB-backed vector cache, populated by an idempotent indexer that runs on app boot:
 
-- **Model corpus** — `bim_elements.json` chunked by `ifc_class`, embedded via `fireworks/qwen3-embedding-8b`.
-- **Mapping corpus** — `mapping_presets.json` chunked per section, embedded.
-- **Spec corpus** — pdfjs runtime text extraction from `eett-c.pdf`, page-level chunks, embedded.
+- **Model corpus** — `data/bim_elements.json` chunked by `ifc_class`, embedded via `fireworks/qwen3-embedding-8b`.
+- **Mapping corpus** — `data/mapping_presets.json` chunked per section, embedded.
+- **Spec corpus** — pdfjs runtime text extraction from `public/eett-c.pdf`, page-level chunks, embedded.
 
 No reranker for PoC. Cosine similarity, top-K=5.
 
-**Storage.** Vanilla IndexedDB (no dependency). Three object stores: `chunks` (text + metadata), `embeddings` (Float32Array vectors keyed by chunk id), `meta` (index hash + timestamp for idempotency).
+**Storage.** Vanilla IndexedDB (no extra dep). Three object stores:
+
+- `chunks` (text + metadata, chunkId key)
+- `embeddings` (Float32Array vectors keyed by chunkId)
+- `meta` (corpus hash + timestamp for idempotency)
 
 **APIs.**
 
 - Gemini 2.5 Flash via Google AI API: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`. Verify model id is GA at impl time; fall back to `gemini-2.0-flash` if needed.
-- Fireworks embedding: `https://api.fireworks.ai/inference/v1/embeddings` with `fireworks/qwen3-embedding-8b`. 1024-dim output.
+- Fireworks embedding: `https://api.fireworks.ai/inference/v1/embeddings` with model `fireworks/qwen3-embedding-8b`. 1024-dim output.
 
-**Env vars** (loaded by Vite from `.env.local`, git-ignored, exposed as `import.meta.env.VITE_*`):
+**Env vars** (Vite loads from `.env.local`, git-ignored, exposed as `import.meta.env.VITE_*`):
 
 - `VITE_GEMINI_API_KEY`
 - `VITE_FIREWORKS_API_KEY`
@@ -66,7 +80,7 @@ Document in `.env.example` (committed) and in README.
 }
 ```
 
-Implementation: embed pregunta via Fireworks, cosine top-5 against the chosen corpus (or all three if 'auto'), concatenate snippets, return `{ respuesta: string, citas: [{ fuente, id, snippet }] }`.
+Implementation: embed `pregunta` via Fireworks → cosine top-5 against the chosen corpus (or all three if `auto`) → concatenate snippets → return `{ respuesta: string, citas: [{ fuente, id, snippet }] }`.
 
 ### 2. `resaltar_elementos`
 
@@ -86,7 +100,7 @@ Implementation: embed pregunta via Fireworks, cosine top-5 against the chosen co
 }
 ```
 
-Implementation: maps to the bim-specs-mapper's existing `Viewer3D.tsx` isolation + Highlighter pipeline (the `matchingSetR` + `hl.highlight` pattern). Returns `{ matching: number, total: number, ids: number[] }`.
+Implementation: maps to the existing `Viewer3D.tsx` isolation + Highlighter pipeline (the `matchingSetR` + `hl.highlight` pattern from bim-specs-mapper). Returns `{ matching: number, total: number, ids: number[] }`.
 
 ### 3. `abrir_seccion_pdf`
 
@@ -105,7 +119,7 @@ Implementation: maps to the bim-specs-mapper's existing `Viewer3D.tsx` isolation
 }
 ```
 
-Implementation: navigates the existing PdfViewer to the matching page. For `seccion_id`/`consulta`, looks up page via the sectionIdToPage heuristic from the mapper + a cosine-search fallback through the spec chunks. Returns `{ pagina: number, titulo: string, snippet: string }`.
+Implementation: navigates the existing `PdfViewer.tsx` to the matching page. For `seccion_id`/`consulta`, look up the page via the sectionIdToPage heuristic from the mapper + a cosine-search fallback through the spec chunks. Returns `{ pagina: number, titulo: string, snippet: string }`.
 
 ## Spanish system prompt (locked)
 
@@ -123,7 +137,7 @@ Reglas:
 
 ## What to copy verbatim from bim-specs-mapper
 
-These files move from `~/projects/bim/bim-specs-mapper/` into the new project. No edits at copy-time.
+`~/projects/bim/bim-specs-mapper/` is read-only. Copy these files via `cp -r` into the new project (path flattened — the new project has no `src/ui/` prefix). Update internal import paths after copy. Do NOT modify the source repo.
 
 | Source | Destination |
 |---|---|
@@ -147,20 +161,18 @@ These files move from `~/projects/bim/bim-specs-mapper/` into the new project. N
 | `data/processed/validation/bim_elements.json` | `data/bim_elements.json` |
 | `data/processed/validation/mapping_presets.json` | `data/mapping_presets.json` |
 
-When copying, **flatten the path** (the new project has no `src/ui/` prefix). Update import statements inside the copied files to match the new structure (e.g. `import { SELECT_MAT } from "./viewer/filterEvaluator"` if any). The token `~/projects/bim/bim-specs-mapper/` is read-only — copy via `cp -r`, do not modify.
-
 ## What to build new
 
 ### Agent layer (`src/agent/`)
 - `loop.ts` — ReAct state machine. Exports `runAgentLoop(userMessage, callbacks)` where callbacks fire on tool-call start/end + final answer.
-- `tools.ts` — 3 tool implementations. Each is a typed async fn `(args) => Promise<result>` with Spanish descriptions.
+- `tools.ts` — 3 tool implementations. Each is a typed async fn `(args) => Promise<result>` with Spanish descriptions used in the schema.
 - `schema.ts` — JSON Schema for the 3 tools, in Gemini function-calling format.
 - `retriever.ts` — `embed(text)` and `cosineSearch(queryVector, topK, corpus)` against IndexedDB. 30s timeout. Spanish error messages.
-- `indexer.ts` — `indexAll()` called once at app boot. Idempotent. Pulls corpora, chunks all three, embeds, writes IndexedDB. Emits progress events for `AgentStatus`.
-- `prompts.ts` — Spanish system prompt above + few-shot for tool-calling shape.
+- `indexer.ts` — `indexAll()` called once at app boot. Idempotent — checks IndexedDB `meta` store for corpus hash; if hash matches prior run, skip. Otherwise: pull corpora, chunk all three, embed, write IndexedDB. Emits progress events for `AgentStatus`.
+- `prompts.ts` — Spanish system prompt above + one brief few-shot for tool-calling shape.
 
 ### Data layer (`src/data/`)
-- `llm.ts` — `geminiComplete(messages, tools)` with optional streaming. `fireworksEmbed(text)`. Keys via `import.meta.env.VITE_*`. Spanish error messages.
+- `llm.ts` — `geminiComplete(messages, tools)` with optional streaming; `fireworksEmbed(text)`. Both keys via `import.meta.env.VITE_*`. Spanish error messages.
 - `storage.ts` — vanilla IndexedDB wrapper with three object stores (`chunks`, `embeddings`, `meta`).
 
 ### UI
@@ -170,17 +182,17 @@ When copying, **flatten the path** (the new project has no `src/ui/` prefix). Up
 - `components/AgentStatus.module.css`.
 - `App.tsx` — REWRITE of mapper's. Split-view layout (PDF left, 3D viewer center, properties panel right) with chat panel as the primary rail. Tabbed review collapses to a toggle.
 - `App.module.css` — new layout.
-- `main.tsx` — boot indexer + `AgentStatus` on first paint.
+- `main.tsx` — boot indexer + AgentStatus on first paint.
 - `index.css` — global styles (copied from mapper).
 
 ### Other
 - `.env.example` — `VITE_GEMINI_API_KEY=***` `VITE_FIREWORKS_API_KEY=***` placeholders + brief setup notes (Spanish).
-- `README.md` — Spanish-primary with concise English counterpart. Cover: what it is, how to run (`cp .env.example .env.local`, `npm install`, `npm run dev`), three-pillar walkthrough with example Spanish queries ("¿Cuántos muros hay?", "muéstrame los muros exteriores", "abre la sección sobre siding").
+- `README.md` — Spanish + English sections. Cover: what it is, how to run (`cp .env.example .env.local`, `npm install`, `npm run dev`), three-pillar walkthrough with example Spanish queries ("¿Cuántos muros hay?", "muéstrame los muros exteriores", "abre la sección sobre siding").
 - `package.json` — minimal: react, react-dom, typescript, vite, `@thatopen/components`, `@thatopen/components-front`, `pdfjs-dist`. NO additional deps unless truly needed (no idb-keyval, no zod, no langchain).
 - `tsconfig.json`, `vite.config.ts`, `index.html` — standard Vite + React TS, copied/adapted from the mapper. Apply `manualChunks` (toe, pdfjs, app) at the start so build works on low-RAM machines.
 
 ### AGENTS.md
-DEFER. Write at the end of the scaffold (mirroring bim-specs-mapper's pattern). The implementation brief is this spec, not AGENTS.md.
+DEFER. Write at the end of the scaffold (mirroring bim-specs-mapper's pattern). The implementation brief is THIS spec, not AGENTS.md.
 
 ## Folder structure (PoC)
 
@@ -258,7 +270,7 @@ The PoC is shippable when ALL of the following are true:
   - "abre la sección sobre siding" → PDF jumps to the right page.
   - "¿qué dice la especificación sobre el siding?" → PDF jumps + answer cites spec text.
 - [ ] `npm run build` produces a clean `dist/` (chunked like the mapper's 3-way split: toe / pdfjs / app). Apply `manualChunks` from the start to avoid OOM.
-- [ ] Only `VITE_*` env-key strings appear in `dist/` (PoC by-design client-visible; document in README).
+- [ ] No real keys leak into `dist/` — only `VITE_*` env-key strings present (PoC by-design client-visible; document in README).
 - [ ] All UI strings in Spanish; English only in code comments + console.error context.
 - [ ] Reset / clear button clears the chat, the highlight in the viewer, and the PDF navigation.
 - [ ] README has Spanish + English sections: setup, three-pillar walkthrough with sample queries, env-var notes.
@@ -267,8 +279,8 @@ The PoC is shippable when ALL of the following are true:
 ## Sub-agent execution contract
 
 - **Working directory:** `~/projects/bim/bim-assistant/`
-- **Read first:** `PROJECT-TRACKER.md`, `.claude/specs/task-poc-v1.md` (this file), then `research/2026-07-30-jarvis-bim-market-and-modifications.md` for full v1 context (but apply the PoC scope reductions).
-- **Commit policy:** leave all work uncommitted. Do NOT run `git add` / `git commit` / `git push`. The Architect reviews + commits.
+- **Read first:** `PROJECT-TRACKER.md`, this spec (`.claude/specs/task-poc-v1.md`), then `research/2026-07-30-jarvis-bim-market-and-modifications.md` for full v1 context (apply the PoC cut).
+- **Commit policy:** leave all work uncommitted. Do NOT run `git add` / `git commit` / `git push`. The Architect handles commits.
 - **Completion signal (two-layer):**
 
   **File.** Overwrite `/home/marvin/projects/bim/bim-assistant/.last-task.md` with:
@@ -294,7 +306,7 @@ The PoC is shippable when ALL of the following are true:
 
   **Best-effort push.** `sessions_send` to `agent:architect:telegram:architect:direct:8450148189` with subject `bim-assistant PoC v1 landed` and a 1-paragraph summary. Skip silently if the tool isn't available.
 
-- **Time budget:** Aim for the scaffold + smoke test in one pass. ~30-60 minutes.
+- **Time budget:** ~30-60 min for scaffold + smoke test.
 
 ## Hard out-of-scope reminders (do NOT build)
 
@@ -302,9 +314,9 @@ The PoC is shippable when ALL of the following are true:
 - ❌ No Cloud Functions proxy. Keys come from `.env.local` via Vite.
 - ❌ No bilingual UI. Spanish only.
 - ❌ No multi-IFC. Single IFC for PoC.
-- ❌ No OCR pipeline. Use pdfjs runtime text extraction (the mapper's `PdfViewer.tsx` already pulls `pdfjs-dist`).
+- ❌ No OCR pipeline. Use pdfjs runtime text extraction.
 - ❌ No cost estimation, no clash queries, no draft specs.
-- ❌ No tool beyond the three listed above (`consultar_base_de_conocimiento`, `resaltar_elementos`, `abrir_seccion_pdf`).
+- ❌ No tool beyond the three listed above.
 - ❌ No deployment setup. `npm run dev` is the deployment.
 - ❌ No corrections feedback loop.
-- ❌ Do NOT commit. Do NOT push. Architect handles all commits.
+- ❌ Do NOT commit. Do NOT push.

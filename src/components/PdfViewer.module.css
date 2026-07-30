@@ -1,0 +1,226 @@
+/* PdfViewer.module.css
+ *
+ * PDF.js viewer for the left pane of the Stage 4 review UI. Uses
+ * FreeField light-theme tokens (--ff-*) so it sits in the same
+ * visual family as SpecPanel / ViewerPane.
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--ff-bg-app);
+}
+
+/* ----- Header (filename strip) ----- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px var(--ff-row-px);
+  border-bottom: 1px solid var(--ff-border);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ff-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.headerFilename {
+  font-size: 11px;
+  color: var(--ff-text-muted);
+  font-family: "SF Mono", monospace;
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ----- Page navigation toolbar ----- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px var(--ff-row-px);
+  border-bottom: 1px solid var(--ff-border);
+  background: var(--ff-bg-panel);
+  flex-shrink: 0;
+}
+
+.navBtn {
+  font-family: var(--ff-font-stack);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ff-text-primary);
+  background: var(--ff-bg-app);
+  border: 1px solid var(--ff-border);
+  border-radius: var(--ff-radius-control);
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  min-width: 64px;
+}
+
+.navBtn:hover:not(:disabled) {
+  background: var(--ff-bg-hover);
+  border-color: var(--ff-blue-active);
+  color: var(--ff-blue-active);
+}
+
+.navBtn:focus-visible {
+  outline: 2px solid var(--ff-blue-active);
+  outline-offset: 1px;
+}
+
+.navBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pageCounter {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ff-text-primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 80px;
+  text-align: center;
+}
+
+/* ----- Canvas area ----- */
+
+.canvasWrap {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background: var(--ff-bg-canvas);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/*
+ * Wrapper around the canvas + text layer. The canvas (a block element
+ * with explicit width/height set by JS) gives this container its size;
+ * the text layer is absolutely positioned on top so it overlays the
+ * canvas pixel-perfectly.
+ */
+.pageContainer {
+  position: relative;
+  display: block;
+  /* Match the canvas's white card look so the text layer (which is
+   * transparent) reads against the same background. */
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--ff-border);
+  border-radius: 2px;
+}
+
+.canvas {
+  display: block;
+  background: transparent;
+  /* width / height are set inline by the JS (fit-to-width math) */
+  max-width: 100%;
+}
+
+/*
+ * PDF.js text layer overlay.
+ *
+ * PDF.js positions each text run as an absolutely-positioned <span>
+ * inside this container. The container's own width/height are set
+ * inline by `setLayerDimensions(container, viewport)` to
+ * `calc(var(--scale-factor) * <rawPageWidth>px)`, so we drive the
+ * scaling from the `--scale-factor` CSS variable (set in JS to match
+ * the canvas scale). See PdfViewer.tsx render effect.
+ */
+.textLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: auto;
+  z-index: 2;
+  overflow: hidden;
+  text-align: initial;
+  line-height: 1;
+  -webkit-text-size-adjust: none;
+  -moz-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  /* Make selection feel like a normal text page. */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+/*
+ * The text spans are created by PDF.js (no CSS-modules awareness),
+ * so we use :global() to target them. Their text is transparent so
+ * the canvas underneath shows through, but the spans themselves are
+ * still selectable / focusable.
+ */
+.textLayer :global(span) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.textLayer :global(span.markedContent) {
+  top: 0;
+  height: 0;
+}
+
+/* ----- Error state ----- */
+
+.error {
+  margin: 24px;
+  padding: 16px;
+  border: 1px solid var(--ff-border);
+  border-radius: var(--ff-radius-control);
+  background: var(--ff-bg-panel);
+  color: var(--ff-text-primary);
+  font-family: var(--ff-font-stack);
+  max-width: 320px;
+}
+
+.errorTitle {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--ff-pdf-icon);
+}
+
+.errorMessage {
+  font-size: 12px;
+  color: var(--ff-text-muted);
+  word-break: break-word;
+  font-family: "SF Mono", monospace;
+}
+
+/* ----- Selected mapped section highlight ----- */
+
+.sectionHighlight {
+  display: none;
+  position: absolute;
+  left: 0;
+  width: 100%;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(59, 130, 246, 0.14);
+  border-left: 3px solid var(--ff-blue-active);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
+  border-radius: 2px;
+}

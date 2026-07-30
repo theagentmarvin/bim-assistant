@@ -1,0 +1,1024 @@
+{
+  "run": {
+    "method": "Architect-reasoned + canonical concepts + specificity gate",
+    "judge": "deepseek-v4-pro",
+    "sections": 17,
+    "elements": 291,
+    "note": "Mappings reasoned directly by Architect, enriched with analysis_class/canonical_concept and evaluated against BIM element coverage.",
+    "canonical_dictionary": "data/reference/canonical_concepts.json"
+  },
+  "mappings": [
+    {
+      "section_id": "C.1.1.5",
+      "section_title": "Siding PVC",
+      "unit": null,
+      "analysis_class": "wall_finish",
+      "quantity_type": "area_m2",
+      "target_mode": "layer",
+      "canonical_concept": "PVC_SIDING",
+      "results": [
+        {
+          "ifc_class": "IfcWall",
+          "conf": 0.9,
+          "base_conf": 0.9,
+          "rationale": "Muros exteriores con revestimiento Siding PVC. BIM tiene 68 IfcWall, algunos con tag EXT y nombre 'SIDING'",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcWall"
+                  },
+                  {
+                    "p": "is_external",
+                    "op": "equals",
+                    "v": "true"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "SIDING"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "high",
+          "analysis_class": "wall_finish",
+          "quantity_type": "area_m2",
+          "target_mode": "layer",
+          "canonical_concept": "PVC_SIDING",
+          "match_stats": {
+            "matched_elements": 30,
+            "match_share": 0.7143,
+            "specificity_status": "specific",
+            "rule_count": 3,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.1.2.2",
+      "section_title": "Yeso cartón 10mm",
+      "unit": null,
+      "analysis_class": "wall_finish",
+      "quantity_type": "area_m2",
+      "target_mode": "layer",
+      "canonical_concept": "GYPSUM_BOARD_STANDARD",
+      "results": [
+        {
+          "ifc_class": "IfcWall",
+          "conf": 0.69,
+          "base_conf": 0.85,
+          "rationale": "Tabiques interiores revestidos yeso carton estandar 10mm. BIM walls contienen 'YC ST' en nombre",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcWall"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "YC ST"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "medium",
+          "analysis_class": "wall_finish",
+          "quantity_type": "area_m2",
+          "target_mode": "layer",
+          "canonical_concept": "GYPSUM_BOARD_STANDARD",
+          "match_stats": {
+            "matched_elements": 33,
+            "match_share": 0.4853,
+            "specificity_status": "broad_review",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.1.3.3",
+      "section_title": "Yeso cartón RH",
+      "unit": null,
+      "analysis_class": "wall_finish",
+      "quantity_type": "area_m2",
+      "target_mode": "layer",
+      "canonical_concept": "GYPSUM_BOARD_RH",
+      "results": [
+        {
+          "ifc_class": "IfcWall",
+          "conf": 0.69,
+          "base_conf": 0.75,
+          "rationale": "Revestimiento yeso carton RH 12.5mm en bano y cocina. Depende de si BIM modela paredes con tag 'RH'",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcWall"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "RH"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "medium",
+          "analysis_class": "wall_finish",
+          "quantity_type": "area_m2",
+          "target_mode": "layer",
+          "canonical_concept": "GYPSUM_BOARD_RH",
+          "match_stats": {
+            "matched_elements": 11,
+            "match_share": 0.1618,
+            "specificity_status": "broad_review",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.2.1",
+      "section_title": "Poliestireno Expandido",
+      "unit": null,
+      "analysis_class": "insulation",
+      "quantity_type": "area_m2",
+      "target_mode": "unmodeled_layer",
+      "canonical_concept": "EPS_SIP_INSULATION",
+      "results": [
+        {
+          "ifc_class": "IfcWall",
+          "conf": 0.69,
+          "base_conf": 0.8,
+          "rationale": "Aislacion Poliestireno 56mm en panel SIP. La aislacion esta embebida en el muro SIP, no como elemento separado",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcWall"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "SIP"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "medium",
+          "analysis_class": "insulation",
+          "quantity_type": "area_m2",
+          "target_mode": "unmodeled_layer",
+          "canonical_concept": "EPS_SIP_INSULATION",
+          "match_stats": {
+            "matched_elements": 24,
+            "match_share": 0.3529,
+            "specificity_status": "broad_review",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.3.2.2",
+      "section_title": "Fe Galvanizado 2do Piso",
+      "unit": null,
+      "analysis_class": "structure_frame",
+      "quantity_type": "count",
+      "target_mode": "unmodeled_layer",
+      "canonical_concept": "METAL_CEILING_FRAME",
+      "results": [
+        {
+          "ifc_class": "IfcMember",
+          "conf": 0.4,
+          "base_conf": 0.5,
+          "rationale": "Perfiles galvanizados Metalcon para cielo 2do piso. BIM tiene IfcMember pero no se si incluye estructura de cielo",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcMember"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "review",
+          "analysis_class": "structure_frame",
+          "quantity_type": "count",
+          "target_mode": "unmodeled_layer",
+          "canonical_concept": "METAL_CEILING_FRAME",
+          "match_stats": {
+            "matched_elements": 6,
+            "match_share": 1.0,
+            "specificity_status": "too_broad_class_only",
+            "rule_count": 1,
+            "class_only": true
+          }
+        }
+      ],
+      "status": "review"
+    },
+    {
+      "section_id": "C.3.3.1",
+      "section_title": "Yeso cartón",
+      "unit": null,
+      "analysis_class": "ceiling_finish",
+      "quantity_type": "area_m2",
+      "target_mode": "layer",
+      "canonical_concept": "GYPSUM_CEILING_RF",
+      "results": [
+        {
+          "ifc_class": "IfcCovering",
+          "conf": 0.6,
+          "base_conf": 0.6,
+          "rationale": "Cielo yeso-carton RF 12.5mm. BIM tiene IfcCovering pero no esta claro si incluye cielos interiores",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcCovering"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "Cielo"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "medium",
+          "analysis_class": "ceiling_finish",
+          "quantity_type": "area_m2",
+          "target_mode": "layer",
+          "canonical_concept": "GYPSUM_CEILING_RF",
+          "match_stats": {
+            "matched_elements": 17,
+            "match_share": 0.5152,
+            "specificity_status": "specific",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.4.3",
+      "section_title": "Lana de vidrio",
+      "unit": null,
+      "analysis_class": "insulation",
+      "quantity_type": "area_m2",
+      "target_mode": "unmodeled_layer",
+      "canonical_concept": "GLASS_WOOL_ROOF_INSULATION",
+      "results": [
+        {
+          "ifc_class": "IfcRoof",
+          "conf": 0.55,
+          "base_conf": 0.55,
+          "rationale": "Lana de vidrio 160mm en techumbre. Aislacion generalmente no se modela como elemento IFC separado; mapeamos al techo",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcRoof"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "review",
+          "analysis_class": "insulation",
+          "quantity_type": "area_m2",
+          "target_mode": "unmodeled_layer",
+          "canonical_concept": "GLASS_WOOL_ROOF_INSULATION",
+          "match_stats": {
+            "matched_elements": 2,
+            "match_share": 1.0,
+            "specificity_status": "proxy_rare_class",
+            "rule_count": 1,
+            "class_only": true
+          }
+        }
+      ],
+      "status": "review"
+    },
+    {
+      "section_id": "C.5.1",
+      "section_title": "Cerámica",
+      "unit": null,
+      "analysis_class": "floor_finish",
+      "quantity_type": "area_m2",
+      "target_mode": "layer",
+      "canonical_concept": "CERAMIC_FLOOR_TILE",
+      "results": [
+        {
+          "ifc_class": "IfcCovering",
+          "conf": 0.45,
+          "base_conf": 0.65,
+          "rationale": "Ceramica 30x30cm en piso bano/cocina. BIM debe tener IfcCovering de piso con ceramica",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcCovering"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "Ceramica"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "review",
+          "analysis_class": "floor_finish",
+          "quantity_type": "area_m2",
+          "target_mode": "layer",
+          "canonical_concept": "CERAMIC_FLOOR_TILE",
+          "match_stats": {
+            "matched_elements": 0,
+            "match_share": 0.0,
+            "specificity_status": "no_match",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "review"
+    },
+    {
+      "section_id": "C.7.1",
+      "section_title": "Escalera Interior (estructura, peldaños, barandas y pasamanos)",
+      "unit": null,
+      "analysis_class": "stair",
+      "quantity_type": "count",
+      "target_mode": "assembly",
+      "canonical_concept": "WOOD_STAIR",
+      "results": [
+        {
+          "ifc_class": "IfcStair",
+          "conf": 0.95,
+          "base_conf": 0.95,
+          "rationale": "Escalera interior madera Pino Radiata. BIM tiene 1 IfcStair 'Assembled Stair:Stair:1435618' con material Madera",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcStair"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "canonical",
+          "analysis_class": "stair",
+          "quantity_type": "count",
+          "target_mode": "assembly",
+          "canonical_concept": "WOOD_STAIR",
+          "match_stats": {
+            "matched_elements": 1,
+            "match_share": 1.0,
+            "specificity_status": "specific_rare_class",
+            "rule_count": 1,
+            "class_only": true
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.8.1.1",
+      "section_title": "Madera",
+      "unit": null,
+      "analysis_class": "structure_frame",
+      "quantity_type": "count",
+      "target_mode": "element",
+      "canonical_concept": "WOOD_EAVE_FRAME",
+      "results": [
+        {
+          "ifc_class": "IfcMember",
+          "conf": 0.7,
+          "base_conf": 0.7,
+          "rationale": "Estructura aleros en madera. BIM tiene IfcMember con material 'Madera - Pino'",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcMember"
+                  },
+                  {
+                    "p": "material_name",
+                    "op": "contains",
+                    "v": "Madera"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "medium",
+          "analysis_class": "structure_frame",
+          "quantity_type": "count",
+          "target_mode": "element",
+          "canonical_concept": "WOOD_EAVE_FRAME",
+          "match_stats": {
+            "matched_elements": 6,
+            "match_share": 1.0,
+            "specificity_status": "specific",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.8.2.4",
+      "section_title": "Fibrocemento",
+      "unit": null,
+      "analysis_class": "roof_finish",
+      "quantity_type": "area_m2",
+      "target_mode": "layer",
+      "canonical_concept": "FIBROCEMENT_EAVE_PANEL",
+      "results": [
+        {
+          "ifc_class": "IfcCovering",
+          "conf": 0.85,
+          "base_conf": 0.85,
+          "rationale": "Revestimiento fibrocemento 6mm en aleros. BIM tiene IfcCovering con material 'PLANCHA FIBROCEMENTO'",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcCovering"
+                  },
+                  {
+                    "p": "material_name",
+                    "op": "contains",
+                    "v": "FIBROCEMENTO"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "high",
+          "analysis_class": "roof_finish",
+          "quantity_type": "area_m2",
+          "target_mode": "layer",
+          "canonical_concept": "FIBROCEMENT_EAVE_PANEL",
+          "match_stats": {
+            "matched_elements": 24,
+            "match_share": 0.7273,
+            "specificity_status": "specific",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.8.4",
+      "section_title": "Tapacán",
+      "unit": null,
+      "analysis_class": "trim",
+      "quantity_type": "linear_m",
+      "target_mode": "element",
+      "canonical_concept": "FIBROCEMENT_TRIM",
+      "results": [
+        {
+          "ifc_class": "IfcCovering",
+          "conf": 0.69,
+          "base_conf": 0.88,
+          "rationale": "Tapacan fibrocemento 6mm. BIM tiene IfcCovering 'Fascia:Tapacan:1390539' con material FIBROCEMENTO",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcCovering"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "Tapacan"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "medium",
+          "analysis_class": "trim",
+          "quantity_type": "linear_m",
+          "target_mode": "element",
+          "canonical_concept": "FIBROCEMENT_TRIM",
+          "match_stats": {
+            "matched_elements": 16,
+            "match_share": 0.4848,
+            "specificity_status": "broad_review",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.9.2.1",
+      "section_title": "Puerta ancho 70",
+      "unit": null,
+      "analysis_class": "door",
+      "quantity_type": "count",
+      "target_mode": "element",
+      "canonical_concept": "MDF_DOOR_700",
+      "results": [
+        {
+          "ifc_class": "IfcDoor",
+          "conf": 0.69,
+          "base_conf": 0.9,
+          "rationale": "Puerta interior MDF ancho 700mm. BIM tiene puertas con '700 x 2000 x 45 MM' en nombre",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcDoor"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "700"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "medium",
+          "analysis_class": "door",
+          "quantity_type": "count",
+          "target_mode": "element",
+          "canonical_concept": "MDF_DOOR_700",
+          "match_stats": {
+            "matched_elements": 3,
+            "match_share": 0.0789,
+            "specificity_status": "broad_review",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.9.2.2",
+      "section_title": "Puerta ancho 75 con vidrio",
+      "unit": null,
+      "analysis_class": "door",
+      "quantity_type": "count",
+      "target_mode": "element",
+      "canonical_concept": "GLAZED_DOOR_750",
+      "results": [
+        {
+          "ifc_class": "IfcDoor",
+          "conf": 0.55,
+          "base_conf": 0.88,
+          "rationale": "Puerta interior vidriada ancho 750mm acceso cocina. BIM tiene puertas con dimensiones en nombre",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcDoor"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "750"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "review",
+          "analysis_class": "door",
+          "quantity_type": "count",
+          "target_mode": "element",
+          "canonical_concept": "GLAZED_DOOR_750",
+          "match_stats": {
+            "matched_elements": 1,
+            "match_share": 0.0263,
+            "specificity_status": "too_broad",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "review"
+    },
+    {
+      "section_id": "C.9.3.2",
+      "section_title": "Puerta ancho 85",
+      "unit": null,
+      "analysis_class": "door",
+      "quantity_type": "count",
+      "target_mode": "element",
+      "canonical_concept": "EXTERIOR_STEEL_DOOR_850",
+      "results": [
+        {
+          "ifc_class": "IfcDoor",
+          "conf": 0.55,
+          "base_conf": 0.9,
+          "rationale": "Puerta acceso exterior acero ancho 850mm. BIM tiene puertas con dimensiones en nombre",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcDoor"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "850"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "review",
+          "analysis_class": "door",
+          "quantity_type": "count",
+          "target_mode": "element",
+          "canonical_concept": "EXTERIOR_STEEL_DOOR_850",
+          "match_stats": {
+            "matched_elements": 1,
+            "match_share": 0.0263,
+            "specificity_status": "too_broad",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "review"
+    },
+    {
+      "section_id": "C.9.4.2",
+      "section_title": "Baño",
+      "unit": null,
+      "analysis_class": "door_hardware",
+      "quantity_type": "set",
+      "target_mode": "offline",
+      "canonical_concept": "DOOR_HARDWARE_SET",
+      "results": [
+        {
+          "ifc_class": "IfcDoor",
+          "conf": 0.4,
+          "base_conf": 0.4,
+          "rationale": "Quincalleria bano: cerradura, bisagras, topes. Esto es hardware de puerta — mapeo generico, el filtro es demasiado amplio",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcDoor"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "offline",
+          "analysis_class": "door_hardware",
+          "quantity_type": "set",
+          "target_mode": "offline",
+          "canonical_concept": "DOOR_HARDWARE_SET",
+          "match_stats": {
+            "matched_elements": 0,
+            "match_share": 0.0,
+            "specificity_status": "offline",
+            "rule_count": 1,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "offline"
+    },
+    {
+      "section_id": "C.9.5.2",
+      "section_title": "PVC",
+      "unit": null,
+      "analysis_class": "window",
+      "quantity_type": "count",
+      "target_mode": "element",
+      "canonical_concept": "PVC_WINDOW",
+      "results": [
+        {
+          "ifc_class": "IfcWindow",
+          "conf": 0.92,
+          "base_conf": 0.92,
+          "rationale": "Ventanas PVC con Termopanel. BIM tiene 7 IfcWindow 'VENTANA_MIXTA_PVC' con material 'Clad - White + Glass'",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcWindow"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "high",
+          "analysis_class": "window",
+          "quantity_type": "count",
+          "target_mode": "element",
+          "canonical_concept": "PVC_WINDOW",
+          "match_stats": {
+            "matched_elements": 7,
+            "match_share": 1.0,
+            "specificity_status": "specific_rare_class",
+            "rule_count": 1,
+            "class_only": true
+          }
+        }
+      ],
+      "status": "mapped"
+    },
+    {
+      "section_id": "C.10.1",
+      "section_title": "Guardapolvo",
+      "unit": null,
+      "analysis_class": "trim",
+      "quantity_type": "linear_m",
+      "target_mode": "offline",
+      "canonical_concept": "MDF_BASEBOARD",
+      "results": [
+        {
+          "ifc_class": "IfcCovering",
+          "conf": 0.45,
+          "base_conf": 0.45,
+          "rationale": "Guardapolvo MDF 12x45mm bajo piso flotante. BIM probablemente no modela guardapolvos como elementos separados",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcCovering"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "Guardapolvo"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "offline",
+          "analysis_class": "trim",
+          "quantity_type": "linear_m",
+          "target_mode": "offline",
+          "canonical_concept": "MDF_BASEBOARD",
+          "match_stats": {
+            "matched_elements": 0,
+            "match_share": 0.0,
+            "specificity_status": "offline",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "offline"
+    },
+    {
+      "section_id": "C.11.1.1",
+      "section_title": "Oleo Semibrillo",
+      "unit": null,
+      "analysis_class": "paint_coating",
+      "quantity_type": "area_m2",
+      "target_mode": "offline",
+      "canonical_concept": "PAINT_COATING",
+      "results": [
+        {
+          "ifc_class": "IfcDoor",
+          "conf": 0.45,
+          "base_conf": 0.45,
+          "rationale": "Pintura oleo semibrillo en puertas acceso y bano. El acabado no es un elemento BIM separado; mapeo generico a puertas",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcDoor"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "offline",
+          "analysis_class": "paint_coating",
+          "quantity_type": "area_m2",
+          "target_mode": "offline",
+          "canonical_concept": "PAINT_COATING",
+          "match_stats": {
+            "matched_elements": 0,
+            "match_share": 0.0,
+            "specificity_status": "offline",
+            "rule_count": 1,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "offline"
+    },
+    {
+      "section_id": "C.3.4.2",
+      "section_title": "Yeso cartón",
+      "unit": null,
+      "analysis_class": "ceiling_finish",
+      "quantity_type": "area_m2",
+      "target_mode": "layer",
+      "canonical_concept": "GYPSUM_CEILING_RH",
+      "results": [
+        {
+          "ifc_class": "IfcCovering",
+          "conf": 0.6,
+          "base_conf": 0.6,
+          "rationale": "Cielo yeso-carton RF 12.5mm zona humeda. Similar a C.3.3.1 pero para zonas humedas",
+          "filter": {
+            "c": "AND",
+            "g": [
+              {
+                "c": "AND",
+                "r": [
+                  {
+                    "p": "ifc_class",
+                    "op": "equals",
+                    "v": "IfcCovering"
+                  },
+                  {
+                    "p": "name",
+                    "op": "contains",
+                    "v": "Cielo"
+                  }
+                ]
+              }
+            ]
+          },
+          "pass": "medium",
+          "analysis_class": "ceiling_finish",
+          "quantity_type": "area_m2",
+          "target_mode": "layer",
+          "canonical_concept": "GYPSUM_CEILING_RH",
+          "match_stats": {
+            "matched_elements": 17,
+            "match_share": 0.5152,
+            "specificity_status": "specific",
+            "rule_count": 2,
+            "class_only": false
+          }
+        }
+      ],
+      "status": "mapped"
+    }
+  ],
+  "stats": {
+    "valid": 12,
+    "total": 17,
+    "pct": 70.6,
+    "gate": "PASS",
+    "confidence": {
+      "canonical": 1,
+      "high": 3,
+      "medium": 8,
+      "review": 5,
+      "offline": 3
+    },
+    "specificity": {
+      "specific": 5,
+      "broad_review": 5,
+      "too_broad_class_only": 1,
+      "proxy_rare_class": 1,
+      "no_match": 1,
+      "specific_rare_class": 2,
+      "too_broad": 2,
+      "offline": 3
+    },
+    "analysis_classes": {
+      "wall_finish": 3,
+      "insulation": 2,
+      "structure_frame": 2,
+      "ceiling_finish": 2,
+      "floor_finish": 1,
+      "stair": 1,
+      "roof_finish": 1,
+      "trim": 2,
+      "door": 3,
+      "door_hardware": 1,
+      "window": 1,
+      "paint_coating": 1
+    }
+  }
+}

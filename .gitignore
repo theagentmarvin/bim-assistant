@@ -13,7 +13,7 @@ dist-tsbuild/
 .env.development.local
 .env.production.local
 
-# OpenClaw / agent artifacts
+# OpenClaw / Firebase host artifacts
 .firebase/
 
 # Python (future pipeline may add; PoC is web-only)

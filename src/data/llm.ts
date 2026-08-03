@@ -1,6 +1,6 @@
 // src/data/llm.ts
 //
-// Thin HTTP clients for the two LLM APIs the JARVIS BIM agent uses.
+// Thin HTTP clients for the two LLM APIs the Salfa BIM Agent 01 agent uses.
 //
 // Both keys come from VITE_* env vars (Vite replaces
 // import.meta.env.VITE_* at build time). The .env.example documents

@@ -74,7 +74,7 @@ export default function ChatPanel({ messages, busy, onSend, onReset }: Props) {
     <div className={styles.panel}>
       <div className={styles.header}>
         <div className={styles.headerTitle}>
-          <span className={styles.brand}>JARVIS</span>
+          <span className={styles.brand}>Salfa BIM Agent 01</span>
           <span className={styles.subtitle}>Asistente BIM</span>
         </div>
         <button
@@ -89,7 +89,7 @@ export default function ChatPanel({ messages, busy, onSend, onReset }: Props) {
       <div className={styles.list} ref={listRef}>
         {messages.length === 0 && (
           <div className={styles.empty}>
-            <div className={styles.emptyTitle}>Pregúntale a JARVIS</div>
+            <div className={styles.emptyTitle}>Pregúntale a Salfa BIM Agent 01</div>
             <ul className={styles.examples}>
               <li>¿Cuántos muros hay en el modelo?</li>
               <li>muéstrame los muros exteriores</li>
@@ -120,7 +120,7 @@ export default function ChatPanel({ messages, busy, onSend, onReset }: Props) {
           placeholder="Escribe tu pregunta… (Enter para enviar, Shift+Enter para nueva línea)"
           rows={2}
           disabled={busy}
-          aria-label="Mensaje para JARVIS"
+          aria-label="Mensaje para Salfa BIM Agent 01"
         />
         <button
           type="submit"
@@ -165,7 +165,7 @@ function MessageRow({ message }: { message: ChatMessage }) {
   return (
     <div className={`${styles.bubble} ${roleClass}`}>
       {message.role === "agent" && (
-        <div className={styles.agentTag}>JARVIS</div>
+        <div className={styles.agentTag}>Salfa BIM Agent 01</div>
       )}
       <div className={styles.text}>{message.text}</div>
     </div>

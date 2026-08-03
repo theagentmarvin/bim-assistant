@@ -1,6 +1,6 @@
 // src/data/storage.ts
 //
-// Vanilla IndexedDB wrapper for the JARVIS BIM RAG cache.
+// Vanilla IndexedDB wrapper for the Salfa BIM Agent 01 RAG cache.
 //
 // Three object stores:
 //   - chunks:     { id, corpus, text, metadata }  (small metadata)

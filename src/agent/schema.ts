@@ -1,6 +1,6 @@
 // src/agent/schema.ts
 //
-// JSON-Schema function declarations for the three JARVIS BIM tools,
+// JSON-Schema function declarations for the three Salfa BIM Agent 01 tools,
 // in Gemini's function-calling format. Names + descriptions are in
 // Spanish (the locked PoC scope).
 

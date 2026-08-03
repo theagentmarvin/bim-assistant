@@ -1,8 +1,8 @@
-# bim-assistant (PoC) — JARVIS BIM
+# bim-assistant (PoC) — Salfa BIM Agent 01
 
 Asistente conversacional en español para revisar modelos IFC y
 especificaciones técnicas. Es la primera versión (PoC) de un chat-first
-"JARVIS para BIM" que responde preguntas sobre el modelo, resalta
+"Salfa BIM Agent 01 para BIM" que responde preguntas sobre el modelo, resalta
 elementos en el visor 3D y abre la página relevante del PDF de
 especificaciones.
 

@@ -1,7 +1,7 @@
 # BIM Assistant Research: Market, Trends & Refactor Plan
 
 **Date:** 2026-07-30
-**Project:** bim-assistant (JARVIS paradigm — chat-first BIM agent)
+**Project:** bim-assistant (Salfa BIM Agent 01 paradigm — chat-first BIM agent)
 **Author:** Research sub-agent (Architect session)
 **Source app:** bim-specs-mapper (HEAD `8cba4cb`, deployed at https://bim-specs-mapper.web.app)
 **Status:** Complete
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-Building a "JARVIS for IFC models" is the exact right bet for mid-2026. The market is converging: LLM tool-calling is production-grade, open-source IFC manipulation (IfcOpenShell, That Open Company) has matured, and the AEC industry is hungry for zero-onboarding tools that don't require BIM expertise. **Three top picks:**
+Building a "Salfa BIM Agent 01 for IFC models" is the exact right bet for mid-2026. The market is converging: LLM tool-calling is production-grade, open-source IFC manipulation (IfcOpenShell, That Open Company) has matured, and the AEC industry is hungry for zero-onboarding tools that don't require BIM expertise. **Three top picks:**
 
 1. **Ship all three pillars (Q&A + show-elements + open-PDFs) in v1 against a single IFC + single spec PDF.** The market has no product that combines conversational Q&A with live 3D element highlighting AND PDF spec cross-referencing in one zero-login surface. This is a greenfield wedge.
 2. **Build around Gemini function-calling + Fireworks embeddings, with a ReAct agent loop.** The stack works. The existing bim-specs-mapper codebase already has the 3D viewer, RAG corpus (bim_elements.json, mapping_presets.json, OCR markdown), and Fireworks pipeline. Lift those intact.
@@ -100,7 +100,7 @@ Building a "JARVIS for IFC models" is the exact right bet for mid-2026. The mark
 
 - **Pricing:** Free tier available, paid plans for teams.
 - **Traction signal:** Growing open-source community. MCP server available (https://mcpservers.com/servers/bimgeek-speckle). Educational programs (Butic The New School). Speckle Ambassador network.
-- **What's interesting:** Open protocol — Speckle's GraphQL API + MCP server is the most interoperable foundation for BIM AI. The "conversational data" philosophy aligns with JARVIS vision.
+- **What's interesting:** Open protocol — Speckle's GraphQL API + MCP server is the most interoperable foundation for BIM AI. The "conversational data" philosophy aligns with Salfa BIM Agent 01 vision.
 - **What's broken:** No integrated 3D viewer + chat surface. Community hacks, not a product. Requires technical setup. No PDF spec pipeline.
 - **URLs:** https://speckle.systems/blog/butic-the-new-school-uses-speckle-to-connect-bim-automation-and-applied-ai/, https://mcpservers.com/servers/bimgeek-speckle
 
@@ -142,7 +142,7 @@ Building a "JARVIS for IFC models" is the exact right bet for mid-2026. The mark
 
 - **Pricing:** Free/open prototype.
 - **Traction signal:** Published on Autodesk Community Blog (Mar 2026). Ukrainian engineer building for "Diia.Construction" state system.
-- **What's interesting:** Closest to JARVIS vision among public prototypes — combines Q&A + 3D highlight + cost calculation. Open-source approach. Uses Gemini API.
+- **What's interesting:** Closest to Salfa BIM Agent 01 vision among public prototypes — combines Q&A + 3D highlight + cost calculation. Open-source approach. Uses Gemini API.
 - **What's broken:** Prototype only. No IFC/openBIM (Autodesk Platform Services). No PDF/spec. Not productized.
 - **URLs:** https://forums.autodesk.com/t5/community-blog-aec-english/bim-ai-how-i-taught-the-model-to-quot-talk-quot-experience-with/ba-p/14036963
 
@@ -479,7 +479,7 @@ The TabbedPanel/SpecPanel/MappingDetail become **agent output rendering** — wh
 5. **Spanish-first or bilingual?** The spec is in Spanish. The IFC properties are mixed. Should the chat surface be bilingual (detect language, respond in same) or Spanish-only for v1?
 6. **Corrections feedback loop.** The existing `mapping_corrections.jsonl` is for fine-tuning. Should the agent consume corrections at query time ("user previously corrected this mapping")? Adds complexity but improves accuracy.
 7. **Firebase site migration.** Rename from `bim-specs-mapper` to `bim-assistant` in Firebase Hosting? Or create a new site alias (parallel deploy)?
-8. **Name.** Confirm "bim-assistant" as the project name, or pick something Boss likes ("JARVIS BIM", "SpecQA", "BIM Chat"). The folder + Firebase site name depend on this.
+8. **Name.** Confirm "bim-assistant" as the project name, or pick something Boss likes ("Salfa BIM Agent 01 BIM", "SpecQA", "BIM Chat"). The folder + Firebase site name depend on this.
 
 ---
 

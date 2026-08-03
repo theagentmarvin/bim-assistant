@@ -6,7 +6,7 @@
 
 ## 1. Identidad y dominio
 
-**bim-assistant** es un PoC de chat-first "JARVIS para BIM" — un agente conversacional en español sobre un modelo IFC + una especificación técnica PDF. Apunta a usuarios SalfaCorp (PMs BIM, coordinadores de revisión) que hacen revisión cruzada de specs vs modelos.
+**bim-assistant** es un PoC de chat-first "Salfa BIM Agent 01 para BIM" — un agente conversacional en español sobre un modelo IFC + una especificación técnica PDF. Apunta a usuarios SalfaCorp (PMs BIM, coordinadores de revisión) que hacen revisión cruzada de specs vs modelos.
 
 **Hipótesis de valor:** reducir el tiempo de revisión manual. Hoy el flujo es: PDF en una pestaña, IFC en otra, buscar manualmente términos cruzando ventanas. Con bim-assistant: preguntar en español *"muéstrame los muros exteriores y dime qué dice la especificación sobre el siding"* → respuesta con cita, visor 3D resaltado en naranja, PDF abierto en la página relevante.
 
@@ -105,7 +105,7 @@ App de source reusada: `~/projects/bim/bim-specs-mapper/` (deployada a Firebase,
 
 Necesito que el agente que itera proponga:
 
-1. **Value prop:** ¿"JARVIS para BIM" resuena? ¿Hay un positioning más fuerte (ej: "spec review copilot", "BIM that talks back")?
+1. **Value prop:** ¿"Salfa BIM Agent 01 para BIM" resuena? ¿Hay un positioning más fuerte (ej: "spec review copilot", "BIM that talks back")?
 2. **Persona:** ¿PM/coordinator haciendo spec review es el target correcto, o hay otro (jefe de obra, calidad, ITO) con más urgencia?
 3. **Killer feature:** ¿Las 3 capacidades actuales (Q&A, show elements, open PDF) son suficientes para MVP, o falta una killer feature para el lanzamiento (ej: comparison entre spec-as-built vs spec-as-designed, mobile, voice)?
 4. **Pricing/billing model** (si lo piensas): ¿internal SalfaCorp tool, multi-tenant SaaS, freemium? Esto afecta el scope de auth/multi-tenant.

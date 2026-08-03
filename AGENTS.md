@@ -5,7 +5,7 @@
 
 ## 0. TL;DR
 
-Spanish chat-first "JARVIS for BIM" PoC. Chat agent (Gemini) with 3 tools over a single IFC + a spec PDF. Right pane is a tabbed view (Spec PDF | Cuantificación). Local-only, no auth, no deploy, single IFC.
+Spanish chat-first "Salfa BIM Agent 01 for BIM" PoC. Chat agent (Gemini) with 3 tools over a single IFC + a spec PDF. Right pane is a tabbed view (Spec PDF | Cuantificación). Local-only, no auth, no deploy, single IFC.
 
 - **Repo:** `~/projects/bim/bim-assistant/`
 - **GitHub:** `https://github.com/theagentmarvin/bim-assistant`

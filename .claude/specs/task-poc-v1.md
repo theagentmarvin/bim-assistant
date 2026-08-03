@@ -1,7 +1,7 @@
 # bim-assistant PoC v1 — implementation spec
 
 **Project:** `~/projects/bim/bim-assistant/` · branch `main` · repo `theagentmarvin/bim-assistant` (public)
-**Brief:** Chat-first "JARVIS for BIM" — Spanish-only PoC over a single IFC + spec PDF.
+**Brief:** Chat-first "Salfa BIM Agent 01 for BIM" — Spanish-only PoC over a single IFC + spec PDF.
 **Date:** 2026-07-30
 **Author:** Architect (Marvin)
 
@@ -124,7 +124,7 @@ Implementation: navigates the existing `PdfViewer.tsx` to the matching page. For
 ## Spanish system prompt (locked)
 
 ```
-Eres JARVIS, un asistente BIM útil y directo. Tu trabajo es responder preguntas sobre el modelo IFC y las especificaciones técnicas del proyecto.
+Eres Salfa BIM Agent 01, un asistente BIM útil y directo. Tu trabajo es responder preguntas sobre el modelo IFC y las especificaciones técnicas del proyecto.
 
 Reglas:
 - Responde SIEMPRE en español, incluso si la pregunta está en otro idioma.

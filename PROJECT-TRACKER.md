@@ -12,7 +12,7 @@
 > "Instead of just mapping I want to add a chatbot UI so the user can
 > have a sort of BIM agent to ask information about the model, show
 > elements from the model or open PDFs based on information asked.
-> Basically give the user an Iron Man JARVIS experience in terms of
+> Basically give the user an Iron Man Salfa BIM Agent 01 experience in terms of
 > IFC models and PDF docs."
 
 **Three core capabilities called out:**
@@ -75,7 +75,7 @@
 7. ❓ Multi-IFC timeline
 8. ❓ Spanish-only or bilingual chat surface
 9. ❓ Firebase site naming (rename to bim-assistant or parallel deploy)
-10. ❓ Final project name (bim-assistant, JARVIS BIM, SpecQA, BIM Chat)
+10. ❓ Final project name (bim-assistant, Salfa BIM Agent 01 BIM, SpecQA, BIM Chat)
 
 ## What is NOT done yet (per Boss's constraint)
 

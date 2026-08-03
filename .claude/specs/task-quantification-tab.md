@@ -153,7 +153,7 @@ interface ConsultarResult {
 
 ### Agent decision logic (system prompt update)
 
-Add to `JARVIS_SYSTEM_PROMPT`:
+Add to `Salfa BIM Agent 01_SYSTEM_PROMPT`:
 
 ```
 - Cuando el usuario pida valores, cantidades, listas o tablas (ej: "lista los tipos de ventana", "dame una tabla por clase", "cuántos elementos de cada material"), incluye un campo `tabla` en la respuesta de `consultar_base_de_conocimiento`. La tabla debe ser pequeña (típicamente <20 filas) y bien rotulada.
@@ -282,7 +282,7 @@ Examples that should NOT trigger `tabla` (pure prose):
 
 ### Phase 4: Agent behavior tuning (~10 LOC + iteration)
 
-- Update `JARVIS_SYSTEM_PROMPT` in `src/agent/prompts.ts` with the table-trigger rules
+- Update `Salfa BIM Agent 01_SYSTEM_PROMPT` in `src/agent/prompts.ts` with the table-trigger rules
 - Smoke test: try each trigger example, verify agent returns `tabla` appropriately
 - Tighten the prompt as needed based on real outputs
 

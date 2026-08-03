@@ -36,3 +36,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Sub-agent completion signal file (workspace-shared, not versioned)
+.last-task.md

@@ -87,8 +87,18 @@ export function evaluationItemFor(
   const merged: Record<string, unknown> = { ...bimElement };
   // Keep render-side values when they exist, but never let undefined/null
   // fragment fields erase the richer extractor fields.
+  // EXCEPTION: express_id — the fragment uses its internal localId as
+  // express_id, which is a different numbering system from the IFC Express
+  // ID in bim_elements.json. The viewer's filter evaluator (used by table
+  // row-click highlighting) needs the JSON's express_id to match the
+  // table's filas_express_ids. Keep the bim element's express_id when
+  // available; only fall back to the fragment's local ID if the bim
+  // element wasn't found.
   for (const [key, value] of Object.entries(item)) {
-    if (value !== undefined && value !== null) merged[key] = value;
+    if (value !== undefined && value !== null) {
+      if (key === "express_id" && bimElement[key as keyof typeof bimElement] !== undefined) continue;
+      merged[key] = value;
+    }
   }
   return merged;
 }

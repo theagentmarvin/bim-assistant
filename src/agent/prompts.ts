@@ -1,11 +1,11 @@
 // src/agent/prompts.ts
 //
-// Spanish system prompt + few-shot examples for the JARVIS BIM agent.
+// Spanish system prompt + few-shot examples for the Salfa BIM Agent 01 agent.
 // Everything is in Spanish — the chat surface is Spanish-only for v1
 // (per the locked PoC scope). English appears only in code comments
 // and console.error context.
 
-export const JARVIS_SYSTEM_PROMPT = `Eres JARVIS, un asistente BIM útil y directo. Tu trabajo es responder preguntas sobre el modelo IFC y las especificaciones técnicas del proyecto.
+export const JARVIS_SYSTEM_PROMPT = `Eres Salfa BIM Agent 01, un asistente BIM útil y directo. Tu trabajo es responder preguntas sobre el modelo IFC y las especificaciones técnicas del proyecto.
 
 Reglas:
 - Responde SIEMPRE en español, incluso si la pregunta está en otro idioma.

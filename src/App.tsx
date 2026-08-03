@@ -312,6 +312,26 @@ export default function App() {
       ],
     };
     setUserSelectionFilter(filter);
+
+    // Boss 2026-08-02 — unify selection state: table row click must
+    // also populate the properties panel (ModelPropertyPanel). Build
+    // a synthetic ElementProperties from the table row's underlying
+    // BIM element data so findBimElement in the panel can resolve
+    // the full PSets/Qtos via the GUID.
+    if (latestTable && rowIndex !== -1) {
+      const row = latestTable.filas[rowIndex];
+      const guid = (row?.element_id ?? row?.guid ?? row?.GlobalId) as string | undefined;
+      const ifcClass = (row?.ifc_class ?? row?.["ifc_class"] ?? "") as string;
+      const name = (row?.Nombre ?? row?.nombre ?? row?.name ?? row?.Name ?? "") as string;
+      setSelectedElement({
+        modelId: "sza-bde3-arq-c1",
+        expressId: ids[0],
+        guid,
+        ifcClass,
+        name,
+        properties: {},
+      });
+    }
   }, [latestTable]);
 
   // ----- Send handler -----
@@ -506,7 +526,7 @@ export default function App() {
         <div className={styles.headerLeft}>
           <img className={styles.logo} src="/salfa-logo.png" alt="Salfa" />
           <div>
-            <div className={styles.title}>JARVIS BIM</div>
+            <div className={styles.title}>Salfa BIM Agent 01</div>
             <div className={styles.subtitle}>Asistente IFC + Especificaciones · PoC</div>
           </div>
         </div>

@@ -136,6 +136,8 @@ const COLUMN_LABEL_TO_KEY: Record<string, string> = {
   exterior: "is_external", is_external: "is_external", es_externo: "is_external",
   "resistencia al fuego": "fire_rating", firerating: "fire_rating", fire_rating: "fire_rating",
   planta: "spatial_container", "spatial container": "spatial_container", spatial_container: "spatial_container",
+  nivel: "spatial_container",
+  piso: "spatial_container",
   "tipo predefinido": "predefined_type", predefined_type: "predefined_type",
   elemento_id: "element_id", element_id: "element_id",
   express_id: "express_id",

@@ -11,7 +11,11 @@ import type { Filter } from "../types";
 import { retrieveSnippets, embed } from "./retriever";
 import type { RetrievedHit } from "./retriever";
 import bimElementsRaw from "../../data/bim_elements.json";
-import type { QuantificationTable } from "../quantification/types";
+import type {
+  OperacionCalculo,
+  QuantificationTable,
+  TotalesSpec,
+} from "../quantification/types";
 
 /**
  * Count bim_elements.json entries by ifc_class. Defensive about the
@@ -116,6 +120,19 @@ export interface TablaSpec {
   agrupar_por?: string[];
   /** Spanish title for the table header. */
   titulo?: string;
+  /**
+   * Boss 2026-08-03 (calcular_cantidades) — when set, the table
+   * aggregates the named column (suma / promedio / min / max), adds a
+   * TOTAL row at the bottom of the Cuantificación tab, and exposes
+   * the aggregate via the table's `totales` field for the agent's
+   * prose response. The column must be one of the labels in `columnas`.
+   * Resolution order is the same as for `columnas` (Spanish aliases
+   * first, then class-specific Qto_ keys via availableColumns).
+   */
+  calcular?: {
+    operacion: OperacionCalculo;
+    columna: string;
+  };
 }
 
 export interface ConsultarArgs {
@@ -170,6 +187,13 @@ const COLUMN_LABEL_TO_KEY: Record<string, string> = {
   area: "NetSideArea",
   "area neta": "NetSideArea",
   "area bruta": "GrossSideArea",
+  // Accented variants (Boss 2026-08-03 — calcular_cantidades test
+  // surfaced this; the LLM frequently passes "Área" / "Área neta" with
+  // the proper Spanish accent from the user's question. Without these
+  // entries the column is filtered out and the table returns undefined).
+  "área": "NetSideArea",
+  "área neta": "NetSideArea",
+  "área bruta": "GrossSideArea",
   "volumen bruto": "GrossVolume",
   "volumen neto": "NetVolume",
 };
@@ -389,10 +413,73 @@ function computeAvailableProperties(
   const keys = new Set<string>();
   for (const r of rows) {
     for (const k of Object.keys(r)) {
+      // Boss 2026-08-03 (calcular_cantidades) — internal row marker,
+      // not a real column. Skip it so the "Agregar columna" dropdown
+      // doesn't offer `_tipo` as an option.
+      if (k === "_tipo") continue;
       if (!displayedColumns.includes(k)) keys.add(k);
     }
   }
   return [...keys].sort();
+}
+
+/**
+ * Boss 2026-08-03 (calcular_cantidades) — infer the unit string from
+ * a resolved Qto_ property key. Volume keys → m³, Area keys → m²,
+ * Length/Width/Height keys → m. Returns undefined for keys that
+ * don't match a known Qto_ segment (e.g. a user-defined property).
+ */
+function getUnitForProperty(key: string): string | undefined {
+  if (/\.Volume$/.test(key) || key.endsWith("Volume")) return "m³";
+  if (/\.Area$/.test(key) || key.endsWith("Area")) return "m²";
+  if (
+    /(\.Length|\.Width|\.Height)$/.test(key) ||
+    key.endsWith("Length") ||
+    key.endsWith("Width") ||
+    key.endsWith("Height")
+  ) {
+    return "m";
+  }
+  return undefined;
+}
+
+/**
+ * Boss 2026-08-03 (calcular_cantidades) — fold a numeric series into
+ * a single aggregate value. Returns 0 for an empty input rather than
+ * NaN/Infinity so the rendered TOTAL row never displays "NaN".
+ */
+function aggregateValues(
+  values: number[],
+  operacion: OperacionCalculo,
+): number {
+  if (values.length === 0) return 0;
+  switch (operacion) {
+    case "suma":
+      return values.reduce((a, b) => a + b, 0);
+    case "promedio":
+      return values.reduce((a, b) => a + b, 0) / values.length;
+    case "min":
+      return Math.min(...values);
+    case "max":
+      return Math.max(...values);
+  }
+}
+
+/**
+ * Boss 2026-08-03 (calcular_cantidades) — coerce a projected cell
+ * value (string | number | boolean) into a finite number for the
+ * aggregate. Returns null for booleans, missing values, strings that
+ * don't parse as a finite number, and `NaN`/`Infinity` so the
+ * aggregate ignores junk without throwing.
+ */
+function readNumericCell(v: string | number | boolean | undefined): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    if (!Number.isNaN(n) && Number.isFinite(n)) return n;
+  }
+  return null;
 }
 
 function defaultTitulo(spec: TablaSpec, count: number): string {
@@ -502,6 +589,40 @@ export function buildTabla(
     typeof r.express_id === "number" ? [r.express_id] : [],
   );
   const filas = rows.map((r) => projectRowFull(r, validColumns, availableColumns));
+  // Boss 2026-08-03 (calcular_cantidades) — compute the aggregate if
+  // the spec asks for one. The TOTAL row goes at the end of `filas`
+  // with `_tipo: "total"`; the panel renders it last with distinct
+  // styling and bypasses filter/sort. The same value is exposed via
+  // `totales` so the agent can phrase the prose response.
+  let totales: TotalesSpec | undefined;
+  if (spec.calcular) {
+    const targetCol = spec.calcular.columna;
+    // Resolve the column to its actual property key so we can
+    // infer the unit (m² / m³ / m) from the Qto_ segment.
+    const resolvedKey = resolveColumnKey(targetCol, availableColumns) ?? undefined;
+    const values: number[] = [];
+    for (const row of filas) {
+      const v = readNumericCell(row[targetCol]);
+      if (v !== null) values.push(v);
+    }
+    if (values.length > 0) {
+      const valor = aggregateValues(values, spec.calcular.operacion);
+      const unidad = resolvedKey ? getUnitForProperty(resolvedKey) : undefined;
+      const formatted = unidad ? `${valor.toFixed(3)} ${unidad}` : valor.toFixed(3);
+      const totalRow: Record<string, string | number | boolean> = { _tipo: "total" };
+      for (const col of validColumns) {
+        totalRow[col] = col === targetCol ? formatted : "—";
+      }
+      filas.push(totalRow);
+      filas_express_ids.push([]);
+      totales = {
+        operacion: spec.calcular.operacion,
+        columna: targetCol,
+        valor,
+        unidad,
+      };
+    }
+  }
   return {
     titulo: spec.titulo ?? defaultTitulo(spec, filas.length),
     columnas: validColumns,
@@ -510,6 +631,7 @@ export function buildTabla(
     available_properties: computeAvailableProperties(filas, validColumns),
     fuente: "modelo",
     generadaEn: new Date().toISOString(),
+    totales,
   };
 }
 

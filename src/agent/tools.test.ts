@@ -3,6 +3,7 @@ import {
   resolveColumnKey,
   getPropertyByPath,
   getScalarTopLevelKeys,
+  buildTabla,
 } from "./tools";
 
 /**
@@ -248,5 +249,109 @@ describe("getScalarTopLevelKeys", () => {
     const keys = getScalarTopLevelKeys([WALL_ROW]);
     expect(keys).not.toContain("psets");
     expect(keys).not.toContain("geometry_summary");
+  });
+});
+
+// -----------------------------------------------------------------------
+// buildTabla — calcular_cantidades (Boss 2026-08-03)
+// -----------------------------------------------------------------------
+
+describe("buildTabla — calcular_cantidades", () => {
+  it("sums Volumen for IfcWall and adds a TOTAL row", () => {
+    // IfcWall has Qto_WallBaseQuantities.GrossVolume; IfcWindow has
+    // only Width/Height/Area (no Volume). Test runs against walls
+    // so the alias "volumen" resolves to a real key.
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre", "Volumen"],
+      calcular: { operacion: "suma", columna: "Volumen" },
+    });
+    expect(tabla).toBeDefined();
+    expect(tabla!.totales).toBeDefined();
+    expect(tabla!.totales!.operacion).toBe("suma");
+    expect(tabla!.totales!.columna).toBe("Volumen");
+    expect(tabla!.totales!.unidad).toBe("m³");
+    expect(tabla!.totales!.valor).toBeGreaterThan(0);
+    const lastRow = tabla!.filas[tabla!.filas.length - 1];
+    expect(lastRow._tipo).toBe("total");
+    expect(lastRow["Volumen"]).toContain("m³");
+    // Non-target columns are "—" in the TOTAL row.
+    expect(lastRow["Nombre"]).toBe("—");
+  });
+
+  it("averages a numeric column (operacion: promedio)", () => {
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Área"],
+      calcular: { operacion: "promedio", columna: "Área" },
+    });
+    expect(tabla!.totales!.operacion).toBe("promedio");
+    expect(tabla!.totales!.columna).toBe("Área");
+    expect(tabla!.totales!.unidad).toBe("m²");
+  });
+
+  it("min operation on Ancho for IfcWindow (unit: m)", () => {
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWindow",
+      columnas: ["Ancho"],
+      calcular: { operacion: "min", columna: "Ancho" },
+    });
+    expect(tabla!.totales!.operacion).toBe("min");
+    expect(tabla!.totales!.unidad).toBe("m");
+  });
+
+  it("max operation on Alto for IfcWall (unit: m)", () => {
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Alto"],
+      calcular: { operacion: "max", columna: "Alto" },
+    });
+    expect(tabla!.totales!.operacion).toBe("max");
+    expect(tabla!.totales!.unidad).toBe("m");
+  });
+
+  it("TOTAL row string matches `${valor.toFixed(3)} ${unidad}`", () => {
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Volumen"],
+      calcular: { operacion: "suma", columna: "Volumen" },
+    });
+    const lastRow = tabla!.filas[tabla!.filas.length - 1];
+    const formatted = lastRow["Volumen"] as string;
+    const expected = `${tabla!.totales!.valor.toFixed(3)} ${tabla!.totales!.unidad}`;
+    expect(formatted).toBe(expected);
+  });
+
+  it("no totales when target column has no numeric values", () => {
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre"],
+      calcular: { operacion: "suma", columna: "Nombre" },
+    });
+    expect(tabla!.totales).toBeUndefined();
+    const hasTotalRow = tabla!.filas.some((r) => r._tipo === "total");
+    expect(hasTotalRow).toBe(false);
+  });
+
+  it("available_properties does not expose _tipo as a column", () => {
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Volumen"],
+      calcular: { operacion: "suma", columna: "Volumen" },
+    });
+    expect(tabla!.available_properties).toBeDefined();
+    expect(tabla!.available_properties).not.toContain("_tipo");
+  });
+
+  it("totales expr resolves to the same Qto_ key as the column projection", () => {
+    // "Volumen" resolves to Qto_WallBaseQuantities.GrossVolume.
+    // The unit inference must agree with the projection or the
+    // rendered TOTAL row will show the wrong unit.
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Volumen"],
+      calcular: { operacion: "suma", columna: "Volumen" },
+    });
+    expect(tabla!.totales!.unidad).toBe("m³");
   });
 });

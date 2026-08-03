@@ -192,6 +192,20 @@
   color: var(--ff-text-primary);
 }
 
+/* Boss 2026-08-03 (calcular_cantidades): TOTAL row at the bottom
+   of the table. Bold, panel-background fill, double top border so
+   it stands apart from the data rows. Bypasses filter/sort via
+   the panel's row separation logic. */
+.rowTotal {
+  background: var(--ff-bg-panel);
+  font-weight: 700;
+  border-top: 2px solid var(--ff-text-primary);
+}
+
+.rowTotal .td {
+  color: var(--ff-text-primary);
+}
+
 /* Boss #14917: × button on user-added column headers to remove them. */
 .removeColBtn {
   background: transparent;

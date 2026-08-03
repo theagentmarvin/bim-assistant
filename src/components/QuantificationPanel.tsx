@@ -173,9 +173,19 @@ export default function QuantificationPanel({ data, onRowSelect, selectedRowInde
   // Boss #14917: track original indices through filter+sort so row
   // clicks always reference the correct express_ids, regardless of
   // the displayed ordering.
+  // Boss 2026-08-03 (calcular_cantidades): separate total rows from
+  // data rows so filter/sort never hides or moves the TOTAL row.
+  // Total rows always render at the bottom.
   const rowsWithMeta = useMemo<RowMeta[]>(() => {
     if (!data) return [];
     let indices = data.filas.map((_, i) => i);
+    const totalIndices: number[] = [];
+    const dataIndices: number[] = [];
+    for (const i of indices) {
+      if (data.filas[i]._tipo === "total") totalIndices.push(i);
+      else dataIndices.push(i);
+    }
+    indices = dataIndices;
     const needle = filter.trim().toLowerCase();
     if (needle) {
       indices = indices.filter((i) =>
@@ -192,10 +202,15 @@ export default function QuantificationPanel({ data, onRowSelect, selectedRowInde
         (a, b) => compareCells(data.filas[a][key], data.filas[b][key]) * dir,
       );
     }
-    return indices.map((i) => ({
+    const dataRows = indices.map((i) => ({
       row: data.filas[i],
       express_ids: data.filas_express_ids?.[i] ?? [],
     }));
+    const totalRows = totalIndices.map((i) => ({
+      row: data.filas[i],
+      express_ids: data.filas_express_ids?.[i] ?? [],
+    }));
+    return [...dataRows, ...totalRows];
   }, [data, filter, sortKey, sortDir, allColumns]);
 
   // Auto-fit: apply content-based default to every column that doesn't
@@ -376,10 +391,15 @@ export default function QuantificationPanel({ data, onRowSelect, selectedRowInde
               const isSelected = selectedRowIds !== null &&
                 express_ids.length === selectedRowIds.length &&
                 express_ids.every((id) => selectedRowIds.includes(id));
+              // Boss 2026-08-03 (calcular_cantidades): total rows
+              // get their own visual treatment and never get the
+              // clickable hover/select styling.
+              const isTotal = row._tipo === "total";
               const rowClass = [
                 styles.row,
-                clickable ? styles.rowClickable : "",
+                clickable && !isTotal ? styles.rowClickable : "",
                 isSelected ? styles.rowSelected : "",
+                isTotal ? styles.rowTotal : "",
               ].filter(Boolean).join(" ");
               return (
                 <tr

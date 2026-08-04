@@ -74,6 +74,13 @@ type FragmentsModelLike = {
   getLocalIds: () => Promise<number[]>;
   getItemsData: (ids: number[], config?: unknown) => Promise<Array<Record<string, unknown>>>;
   getGuidsByLocalIds?: (ids: number[]) => Promise<Array<string | null>>;
+  // Combined bounding box of the given localIds in the model's local
+  // space. Declared optional because not every TOE release has it on
+  // the same surface; callers fall back to model.getFullBBox() when
+  // missing. (OBC 3.4.8's @thatopen/fragments 3.4.7 declares this as
+  // `getBBoxes(items: number[]): THREE.Box3` — synchronous, returns the
+  // union box of the listed items in the model's local space.)
+  getBBoxes?: (items: number[]) => THREE.Box3;
 };
 
 export interface ElementClickData { ifcClass: string; name: string; expressID: number; modelId: string; }
@@ -153,6 +160,15 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
     if (w.renderer) (w.renderer as unknown as { showLogo?: boolean }).showLogo = false;
     w.camera = new OBC.OrthoPerspectiveCamera(c);
     w.camera.controls!.setLookAt(15, 15, 15, 0, 0, 0);
+    // Smoother orbit / pan / zoom. yomotsu/camera-controls exposes a
+    // runtime dampingFactor on the controls instance; the TOE typings
+    // (3.4.8) do NOT surface it on the CameraControls abstract surface,
+    // so we cast through `unknown` for the assignment. Default is 0.05
+    // (a touch snappy); 0.15 keeps input responsive but adds a clear
+    // ease-out on release. Not exposed as a UI control per Boss
+    // directive 2026-08-04 09:58 ("keep it short" — bake in, don't add
+    // a knob).
+    (w.camera.controls as unknown as { dampingFactor?: number }).dampingFactor = 0.15;
     // Live re-render during navigation. Without this listener the
     // fragments manager doesn't repaint between camera ticks and orbit
     // / zoom feels rigid / laggy. This is the canonical TOE pattern from
@@ -553,9 +569,10 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
         }
       }
 
+      const total = Object.keys(items).length;
       console.log("[V3D] highlighter (user selection):", {
         matching: matching.size,
-        total: Object.keys(items).length,
+        total,
       });
 
       // Always clear first so the previous run's matching set
@@ -567,6 +584,36 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
           { [MODEL_ID]: new Set([...matching]) },
           false,
         ).catch((e) => console.warn("[V3D] filter highlight failed:", e));
+      }
+
+      // v1.1 (Boss 2026-08-04 09:58): when the user clicks a row in the
+      // cuantificación table and the filter narrows down to a meaningful
+      // subset, smoothly orbit to fit the matching elements in the
+      // viewport. The agentFilter useEffect above does NOT auto-fit —
+      // chat-driven filters are typically narrow by element category
+      // and a jumping camera on every reply feels unstable.
+      // We only auto-fit when matching is a *non-trivial* subset: skip
+      // the trivial cases (empty set, full set, identity) where the
+      // current framing is already correct.
+      if (matching.size > 0 && matching.size < total) {
+        try {
+          const model = fragsR.current?.list.get(MODEL_ID) as unknown as
+            | (FragmentsModelLike & { getBBoxes?: (items: number[]) => THREE.Box3 })
+            | undefined;
+          const box = model?.getBBoxes?.([...matching]);
+          // fitToBox lives on the yomotsu/camera-controls instance
+          // wrapped by TOE — not on the TOE-typed abstract surface in
+          // 3.4.8, hence the cast. The boolean argument enables the
+          // smooth tween (~600ms ease-in-out by default).
+          if (box && box.isEmpty?.() === false) {
+            const ctrl = worldR.current?.camera.controls as unknown as {
+              fitToBox?: (b: THREE.Box3, t: boolean) => void | Promise<void>;
+            };
+            if (ctrl?.fitToBox) void ctrl.fitToBox(box, true);
+          }
+        } catch (e) {
+          console.warn("[V3D] fitToBox failed:", e);
+        }
       }
     } else {
       hl.clear("filter").catch(() => {});

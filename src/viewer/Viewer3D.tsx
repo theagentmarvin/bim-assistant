@@ -156,20 +156,42 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
     if (!cr.current) return;
     disR.current = false; loadedR.current = false; itemsR.current = null;
     const c = new OBC.Components(); compR.current = c;
-    const w = c.get(OBC.Worlds).create<OBC.SimpleScene, OBC.OrthoPerspectiveCamera, OBC.SimpleRenderer>();
+    const w = c.get(OBC.Worlds).create<OBC.SimpleScene, OBC.OrthoPerspectiveCamera, OBCF.PostproductionRenderer>();
     w.scene = new OBC.SimpleScene(c); w.scene.setup();
     // Solid neutral background — `scene.three.background` is the source
-    // of truth, the renderer.clearColor fallback is unnecessary (the
-    // example Worlds/example.ts uses `scene.three.background = null`;
-    // we keep a solid color since the viewer sits inside a styled card
-    // and a transparent background would leak the card chrome through).
+    // of truth. The previous `showLogo = false` line on SimpleRenderer
+    // is gone because the new PostproductionRenderer (below) does not
+    // surface a `showLogo` property — it doesn't ship the upstream
+    // "That Open Company" watermark in the first place, so the
+    // branding opt-out becomes implicit.
     w.scene.three.background = new THREE.Color(0xf2f3f4);
-    // Branding: hide the "That Open Company" watermark. The viewer is
-    // shipped as Salfa BIM Agent 01 — the upstream logo is off by
-    // default in our deployment. (TOE Worlds/example.ts shows
-    // `showLogo = true`; we opt out for product consistency.)
-    w.renderer = new OBC.SimpleRenderer(c, cr.current);
-    if (w.renderer) (w.renderer as unknown as { showLogo?: boolean }).showLogo = false;
+    // v1.1 (Boss 2026-08-04 12:52 GMT-4): swap SimpleRenderer for
+    // PostproductionRenderer so we can apply the COLOR_SHADOWS visual
+    // style. This is the SINGLE preset we ship for v1.1 — no UI
+    // dropdown, no other PostproductionAspect values exposed. The
+    // styles we are explicitly NOT shipping (kept out of scope per
+    // Boss's "we wont implement the rest for now" directive):
+    //   - COLOR               (plain shaded)
+    //   - PEN                 (white model with black outline)
+    //   - PEN_SHADOWS         (pen + AO shadows)
+    //   - COLOR_PEN           (color + outline, no shadows)
+    //   - COLOR_PEN_SHADOWS   (color + outline + AO shadows)
+    // COLOR_SHADOWS = color shading + AO shadows only — gives contact
+    // shadows in concave regions and clean depth cues without the
+    // outlined "blueprint" look. Pairs cleanly with our existing
+    // SELECT_MAT / FILTER_MAT highlighting layer; outlines-enabled
+    // is true by default at this aspect, so OBF.Outliner (separate
+    // component, not wired in this commit) can be added later
+    // without flipping renderer state.
+    w.renderer = new OBCF.PostproductionRenderer(c, cr.current);
+    // dynamicAnchor=false is the documented pairing for
+    // PostproductionRenderer (per the upstream
+    // packages/front/src/core/PostproductionRenderer/example.ts):
+    // picks stay anchored to a stable world-space position instead
+    // of recomputing on camera change, which can desync with the
+    // depth-buffer-driven postprocessing passes (GTAO and PD AO
+    // read depth). Cheap flag, breaks subtly if you forget it.
+    w.dynamicAnchor = false;
     w.camera = new OBC.OrthoPerspectiveCamera(c);
     w.camera.controls!.setLookAt(15, 15, 15, 0, 0, 0);
     // Smoother orbit / pan / zoom. yomotsu/camera-controls exposes a
@@ -289,6 +311,20 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
     }
 
     worldR.current = w; c.init();
+    // Postproduction preset — locked to COLOR_SHADOWS per Boss
+    // directive 2026-08-04 12:52 GMT-4. We enable here (after
+    // components.init()) rather than inside the async IIFE so the
+    // empty world doesn't render and churn the postprocessing passes
+    // for nothing; the first frame after fragments load will pick
+    // this up automatically via the AUTO render loop.
+    // The `outlinesEnabled` flag stays at its postproduction
+    // COLOR_SHADOWS default (true) so a future OBF.Outliner wire-up
+    // works without re-toggling renderer state. SMAA stays at its
+    // default (true) for clean edge anti-aliasing on the POST passes.
+    if (w.renderer) {
+      w.renderer.postproduction.enabled = true;
+      w.renderer.postproduction.style = OBCF.PostproductionAspect.COLOR_SHADOWS;
+    }
     const frags = c.get(OBC.FragmentsManager); fragsR.current = frags;
     const stale = () => compR.current !== c;
     // Holder for the custom pointerdown listener cleanup; written by

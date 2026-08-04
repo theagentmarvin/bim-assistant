@@ -20,6 +20,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as OBC from "@thatopen/components";
 import * as OBCF from "@thatopen/components-front";
 import * as FRAGS from "@thatopen/fragments";
+import * as BUI from "@thatopen/ui-obc";
 import * as THREE from "three";
 
 import type { Filter, Mapping } from "../types";
@@ -28,6 +29,17 @@ import { getFragmentWorkerUrl } from "./blobWorker";
 import { WEBIFC_WASM_BASE } from "./webIfc";
 import { evaluateFilter, type FragmentItem } from "./filterEvaluator";
 import { evaluationItemFor } from "../data/elements";
+
+// Initialize the BUI manager once at module load. @thatopen/ui-obc
+// re-exports BUI from @thatopen/ui plus a Manager class that wires up
+// the bim-* custom elements (bim-view-cube, bim-viewport, etc.) for
+// use as regular DOM elements. The call is idempotent — safe under
+// React StrictMode double-invocation and harmless if invoked more
+// than once. The `typeof window` guard lets Vite SSR / test harnesses
+// import this module without crashing.
+if (typeof window !== "undefined") {
+  BUI.Manager.init();
+}
 
 const MODEL_ID = "sza-bde3-arq-c1";
 const IFC_URL = "/SZA_BDE3_ARQ_C1.ifc";
@@ -184,11 +196,106 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
       const fr = fragsR.current;
       if (fr) void fr.core.update();
     });
+
+    // Cleanup hook for the ViewCube overlay (camera-controls listener,
+    // face-click listeners, DOM removal). Declared here so the
+    // synchronous `if (cr.current)` block below can assign it without
+    // hitting a let TDZ; consumed by the outer useEffect return.
+    let viewCubeCleanup: (() => void) | null = null;
+
+    // v1.1 (Boss 2026-08-04 09:58): nav cube overlay. The
+    // <bim-view-cube> LitElement from @thatopen/ui-obc renders a small
+    // orientation indicator in the canvas corner; clicking a face snaps
+    // the camera to that direction with a smooth tween. The bim-view-cube
+    // custom element is registered by BUI.Manager.init() at module load
+    // (see top of file) — no manual LitElement registration needed.
+    //
+    // The cube appends to a positioned wrapper div (.viewCubeContainer
+    // in the CSS module, top-right corner) so it sits in the corner of
+    // the canvas without disturbing the existing overlays (status badge
+    // top-left, class badge top-right — class badge is pushed below the
+    // cube by the cube's height).
+    if (cr.current) {
+      const viewCubeBox = document.createElement("div");
+      viewCubeBox.className = styles.viewCubeContainer ?? "viewCubeContainer";
+      cr.current.appendChild(viewCubeBox);
+
+      type ViewCubeLike = HTMLElement & {
+        camera: THREE.Camera | null;
+        updateOrientation: () => void;
+      };
+      const vc = document.createElement("bim-view-cube") as unknown as ViewCubeLike;
+      vc.camera = w.camera.three;
+      viewCubeBox.appendChild(vc as unknown as HTMLElement);
+
+      // Keep the cube in sync with the camera. The cube reads
+      // camera.position/quaternion directly; updateOrientation()
+      // re-projects those into the cube's CSS 3D transform.
+      // Listener is independent from the fragments.core.update one
+      // (added above) so they can be removed independently in
+      // cleanup.
+      const updateVcOrientation = () => {
+        try { vc.updateOrientation(); } catch { /* */ }
+      };
+      w.camera.controls!.addEventListener("update", updateVcOrientation);
+
+      // Face-click handlers — snap the camera to the canonical
+      // axis-aligned direction while preserving the current
+      // distance to target. We read the live target via
+      // camera.controls.getTarget() and the live eye from
+      // camera.position so the snap feels anchored to whatever the
+      // user was looking at, never a hardcoded world origin.
+      // setLookAt(eye, target, true) → yomotsu's smooth tween
+      // (~600ms ease-in-out by default).
+      const FACES = ["top", "bottom", "left", "right", "front", "back"] as const;
+      type Face = typeof FACES[number];
+      const AXIS: Record<Face, [number, number, number]> = {
+        top:    [ 0,  1,  0],
+        bottom: [ 0, -1,  0],
+        left:   [-1,  0,  0],
+        right:  [ 1,  0,  0],
+        front:  [ 0,  0,  1],
+        back:   [ 0,  0, -1],
+      };
+      const faceListeners: Array<[string, EventListener]> = [];
+      for (const face of FACES) {
+        const eventName = `${face}click` as const;
+        const axis = AXIS[face];
+        const handler: EventListener = () => {
+          const ctrls = w.camera.controls;
+          const cam = w.camera.three;
+          if (!ctrls) return;
+          const target = ctrls.getTarget(new THREE.Vector3());
+          const dist = cam.position.distanceTo(target);
+          void ctrls.setLookAt(
+            target.x + axis[0] * dist,
+            target.y + axis[1] * dist,
+            target.z + axis[2] * dist,
+            target.x, target.y, target.z,
+            true,                                                 // enableTransition
+          );
+        };
+        vc.addEventListener(eventName, handler);
+        faceListeners.push([eventName, handler]);
+      }
+
+      viewCubeCleanup = () => {
+        for (const [ev, lst] of faceListeners) {
+          try { vc.removeEventListener(ev, lst); } catch { /* */ }
+        }
+        try { w.camera.controls!.removeEventListener("update", updateVcOrientation); } catch { /* */ }
+        try { viewCubeBox.remove(); } catch { /* */ }
+      };
+    }
+
     worldR.current = w; c.init();
     const frags = c.get(OBC.FragmentsManager); fragsR.current = frags;
     const stale = () => compR.current !== c;
     // Holder for the custom pointerdown listener cleanup; written by
     // the async init IIFE once the canvas + Highlighter are ready.
+    // (Declared after the IIFE-block scope check because the IIFE
+    // runs synchronously up to its first await — by which point this
+    // let-binding has been initialized.)
     let pointerDownCleanup: (() => void) | null = null;
 
     (async () => {
@@ -318,6 +425,11 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
           if (ev.button !== 0) return;                                  // left-click only
           if (disR.current || !loadedR.current) return;
           if (!cr.current) return;
+          // v1.1 (Boss 2026-08-04 09:58): ignore clicks that land on a
+          // child overlay (nav cube, status badge, etc.). Pointer events
+          // bubble up from children to cr.current, but we only want to
+          // pick when the user clicks the canvas surface itself.
+          if (ev.target !== cr.current) return;
           // Defer the raycast until pointerup so we can distinguish
           // a click (pick) from a drag (preserve selection). Capture
           // the pointer so pointermove/pointerup still fire on the
@@ -352,6 +464,10 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
 
           if (disR.current || !loadedR.current) return;
           if (!cr.current) return;
+          // v1.1 (Boss 2026-08-04 09:58): mirror the pointerdown guard
+          // — if the gesture started on the canvas but ended on an
+          // overlay child (e.g., nav cube), don't pick on release.
+          if (ev.target !== cr.current) return;
           const items = itemsR.current; if (!items) return;
           const hl = hlR.current;      if (!hl) return;
           const w = worldR.current;     if (!w) return;
@@ -460,6 +576,7 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
     return () => {
       disR.current = true; loadedR.current = false; itemsR.current = null;
       pointerDownCleanup?.();
+      viewCubeCleanup?.();
       const h = hlR.current; if (h) { void h.dispose().catch(() => {}); } hlR.current = null;
       hiderR.current = null;
       try { c.dispose(); } catch { /* */ }

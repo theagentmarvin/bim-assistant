@@ -60,6 +60,27 @@
   pointer-events: none;
 }
 
+/* ViewCube overlay (top-right) — small orientation indicator and
+   face-click nav. Sits in the same top-right corner as the class
+   badge; since the cube is the primary navigation affordance for v1.1
+   we let it visually overlay the badge when both are present (the
+   cube is z-index: 11, badge z-index: 5). 128×128 matches the
+   bim-view-cube default size; the soft drop-shadow keeps it
+   legible against both light and dark model frames.
+   `touch-action: none` keeps touch drags on the cube from
+   scrolling/targeting the surrounding page. */
+.viewCubeContainer {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 128px;
+  height: 128px;
+  pointer-events: auto;
+  z-index: 11;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.12));
+  touch-action: none;
+}
+
 .classBadgeLabel {
   color: rgba(255, 159, 67, 0.65);
   margin-right: 6px;

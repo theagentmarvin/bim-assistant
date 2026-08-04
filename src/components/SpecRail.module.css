@@ -1,0 +1,86 @@
+/* SpecRail.module.css
+ *
+ * 44px-wide vertical-text rail. Visible when the drawer leaves
+ * peek. Click → drawer collapses to peek, spec column expands.
+ *
+ * Stage 1 of the drawer redesign.
+ */
+
+.rail {
+  width: 44px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--ff-bg-panel);
+  border: 0;
+  border-right: 1px solid var(--ff-border);
+  cursor: pointer;
+  padding: 14px 0 16px;
+  gap: 12px;
+  font-family: inherit;
+  transition: background 150ms ease, width 240ms ease-out;
+}
+
+.rail:hover {
+  background: var(--ff-bg-hover);
+}
+
+.rail:focus-visible {
+  outline: 2px solid var(--ff-blue-active);
+  outline-offset: -2px;
+  border-radius: 2px;
+}
+
+.railChevron {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ff-text-secondary);
+  transition: transform 150ms ease, color 150ms ease;
+  margin-bottom: 4px;
+}
+
+.rail:hover .railChevron {
+  transform: translateX(2px);
+  color: var(--ff-text-primary);
+}
+
+.railLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  /* Rotate the labels so they read bottom-to-top. */
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ff-text-primary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.15;
+}
+
+.railLabelPrimary {
+  /* No-op — visual rhythm only. */
+}
+
+.railLabelSecondary {
+  color: var(--ff-text-secondary);
+  font-weight: 500;
+}
+
+.railFile {
+  /* Same orientation as the label so the file name reads
+   * bottom-to-top alongside the title. */
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ff-text-muted);
+  letter-spacing: 0.04em;
+  margin-top: auto;
+  font-family: var(--ff-font-stack);
+}

@@ -621,6 +621,70 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Stage 1 (drawer redesign): ResizeObserver on the canvas container
+  // so the camera aspect + renderer size track the viewer's changing
+  // height as the cuantificación drawer slides up and down. The
+  // PostproductionRenderer does NOT auto-resize — without this hook
+  // the canvas would visibly squash / stretch during drag.
+  //
+  // Design constraints (Boss 2026-08-04 16:50 #15872):
+  //   - Update camera.aspect + renderer.setSize ONLY.
+  //   - No scene reinit, no controls.fitToBox, no frags.core.update().
+  //   - Throttled to requestAnimationFrame (one resize per frame max).
+  //   - Skip while the renderer is mid-init (worldR.current is null);
+  //     the initial observation fires once now and once more after the
+  //     async init completes, which is fine — the second observation
+  //     carries the correct size.
+  useEffect(() => {
+    if (!cr.current) return;
+    let rafId: number | null = null;
+    const observer = new ResizeObserver((entries) => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const entry = entries[0];
+        if (!entry) return;
+        const { width, height } = entry.contentRect;
+        if (width <= 0 || height <= 0) return;
+        const world = worldR.current;
+        if (!world || !world.renderer) return;
+        // TOE types `world.camera.three` as `THREE.Camera` (abstract);
+        // `aspect` and `updateProjectionMatrix()` live on the concrete
+        // PerspectiveCamera. Cast through `unknown` to access them
+        // without an `any` escape hatch. The OrthoPerspectiveCamera
+        // instance we create in the init effect always has a
+        // perspective camera on the .three surface, so this cast is
+        // sound at runtime.
+        const camera = world.camera.three as unknown as {
+          aspect: number;
+          updateProjectionMatrix: () => void;
+        };
+        if (camera) {
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+        }
+        // PostproductionRenderer wraps THREE.WebGLRenderer; the
+        // underlying `setSize(w, h)` is what we want. The TOE
+        // typings don't surface it on the abstract renderer
+        // surface, hence the cast.
+        const renderer = world.renderer as unknown as {
+          setSize?: (w: number, h: number) => void;
+        };
+        if (typeof renderer.setSize === "function") {
+          renderer.setSize(width, height);
+        }
+      });
+    });
+    observer.observe(cr.current);
+    return () => {
+      observer.disconnect();
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Agent-driven filter → OBC.Hider isolation.
   //
   // Sources: agentFilter (chat-driven), mapping (PDF section click),

@@ -1,3 +1,19 @@
+/* App.module.css — bim-assistant PoC shell layout.
+ *
+ * 3-column flex layout (stage 1 of the drawer redesign):
+ *   [ChatPanel] [Spec column] [ViewerPane + CuantificacionDrawer]
+ *
+ * The spec column is `pdfSlotWidth` when the drawer is at peek
+ * (showing the PdfViewer + a resizable vertical splitter) and a
+ * 44px rail otherwise (showing the SpecRail). The flex `width`
+ * transition (240ms ease-out) is set on `.specColumn` itself so
+ * the column smoothly expands and collapses in sync with the
+ * drawer's vertical slide.
+ *
+ * The properties column was removed from the grid; the ModelPropertyPanel
+ * returns as a floating overlay in stage 2.
+ */
+
 .shell {
   display: grid;
   grid-template-rows: auto auto 1fr;
@@ -59,46 +75,46 @@
   border: 1px solid var(--ff-border);
 }
 
-/* Split-view shell (vertical dividers, 4 columns):
- *   [ChatPanel] [PdfViewer] [ViewerPane (3D)] [ModelPropertyPanel]
- * Columns use minmax() so on narrow screens the viewer still claims
- * the remainder instead of getting squeezed to zero.
- */
+/* Body — flex row of three columns. The middle column (spec) has a
+ * dynamic width and a CSS transition so the rail collapse animates
+ * in sync with the drawer's vertical slide. */
 .body {
-  display: grid;
-  grid-template-columns:
-    minmax(300px, 340px)
-    minmax(360px, 420px)
-    minmax(420px, 1fr)
-    minmax(260px, 320px);
+  display: flex;
   min-height: 0;
   height: 100%;
+  background: var(--ff-bg-app);
 }
 
 .left {
-  min-width: 0;
-  min-height: 0;
+  flex: 0 0 320px;
+  min-width: 280px;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--ff-border);
 }
 
-.pdfSlot {
+.specColumn {
+  flex: 0 0 auto;
   min-width: 0;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--ff-bg-app);
   border-right: 1px solid var(--ff-border);
-  /* Boss #14917 (follow-up): anchor for the absolutely-positioned
-   * splitter handle on the right edge. */
   position: relative;
+  /* Animated when the drawer leaves / returns to peek. The width
+   * value is set inline via `style={{ width: '...px' }}`; the
+   * transition runs on class change. */
+  transition: width 240ms ease-out;
+  overflow: hidden;
 }
 
 /* Boss #14917 (follow-up): drag handle on the right edge of the
- * cuantificación panel. 6px wide, centered on the column boundary
- * so it's easy to grab. The visual cue is a faint blue line on hover
- * or active drag — invisible at rest so it doesn't clutter the UI. */
+ * spec column. 6px wide, centered on the column boundary so it's
+ * easy to grab. The visual cue is a faint blue line on hover or
+ * active drag — invisible at rest so it doesn't clutter the UI.
+ * Only visible when the spec column is at its full width (drawer
+ * at peek). */
 .splitter {
   position: absolute;
   top: 0;
@@ -118,18 +134,10 @@
   opacity: 0.5;
 }
 
-.center {
+.viewerColumn {
+  flex: 1 1 auto;
   min-width: 0;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--ff-bg-canvas);
-}
-
-.right {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--ff-border);
 }

@@ -1,12 +1,18 @@
 // src/App.tsx — bim-assistant PoC shell.
 //
-// Chat-first split-view:
+// Chat-first split-view (3 columns):
 //   - Left rail: ChatPanel (primary surface)
-//   - Center column: 3D viewer + PDF below
-//   - Right rail: properties panel
+//   - Center column: Spec PDF (or 44px rail when the cuantificación
+//     drawer leaves peek)
+//   - Right column: ViewerPane + CuantificaciónDrawer (the drawer
+//     slides up from the bottom of the viewer; the viewer shrinks
+//     to compensate)
 //
-// The chat panel drives Viewer3D and PdfViewer via the agent loop's
-// tool callbacks.
+// Stage 1 of the drawer redesign (see
+// .claude/specs/task-drawer-redesign.md). The properties column
+// was removed from the grid; the ModelPropertyPanel returns as a
+// floating overlay in stage 2. setSelectedElement still fires on
+// row click so the stage-2 hookup is straightforward.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ViewerPane from "./components/ViewerPane";
@@ -16,9 +22,8 @@ import ChatPanel, {
   type ChatMessage,
   summarizeToolResult,
 } from "./components/ChatPanel";
-import ModelPropertyPanel from "./components/ModelPropertyPanel";
-import RightPaneTabs, { type RightPaneTabId } from "./components/RightPaneTabs";
-import QuantificationPanel from "./components/QuantificationPanel";
+import CuantificacionDrawer, { type DrawerState } from "./components/CuantificacionDrawer";
+import SpecRail from "./components/SpecRail";
 import { loadMappings } from "./data/mappings";
 import type { ElementClickData, ElementProperties } from "./viewer/Viewer3D";
 import { runAgentLoop } from "./agent/loop";
@@ -39,20 +44,28 @@ import styles from "./App.module.css";
 
 const MODEL_ID_DEFAULT_IFC_CLASS: string | null = null;
 
-// Boss #14917 (follow-up): user-resizable cuantificación panel width.
+// Boss #14917 (follow-up): user-resizable spec column width.
 // Persisted in localStorage. The default mirrors the prior minmax
-// (420px). Min/max clamp prevents the user from squeezing the panel
+// (420px). Min/max clamp prevents the user from squeezing the column
 // to nothing or pushing the 3D viewer off-screen.
-const PDF_SLOT_WIDTH_KEY = "bim-assistant:pdf-slot-width";
+const PDF_SLOT_WIDTH_KEY = "bim-as…idth";
 const PDF_SLOT_WIDTH_DEFAULT = 420;
 const PDF_SLOT_WIDTH_MIN = 280;
 const PDF_SLOT_WIDTH_MAX = 1000;
 
+// Stage 1 (drawer redesign): drawer state persistence. Validated on
+// restore to avoid a stuck drawer if localStorage got corrupted.
+const DRAWER_STATE_KEY = "bim-assistant:drawerState";
+const SPEC_RAIL_WIDTH = 44;
+
+function isValidDrawerState(v: unknown): v is DrawerState {
+  return v === "peek" || v === "expanded" || v === "full";
+}
+
 export default function App() {
   const { mappings } = useMemo(() => loadMappings(), []);
 
-  // Boss #14917 (follow-up): resize state for the cuantificación
-  // panel (column #2). Persists across reloads.
+  // Boss #14917 (follow-up): resize state for the spec column.
   const [pdfSlotWidth, setPdfSlotWidth] = useState<number>(() => {
     try {
       const raw = window.localStorage.getItem(PDF_SLOT_WIDTH_KEY);
@@ -105,45 +118,25 @@ export default function App() {
   }, [pdfSlotWidth]);
 
   // ----- 3D viewer state -----
-  // We expose Viewer3D's filter/IFC class via the ViewerPane's
-  // `mapping`/`selectedIfcClass` props. The chat-driven tool result
-  // produces an "agentMapping" / "agentIfcClass" pair that's
-  // independent of the manual TabbedPanel selection — for PoC, the
-  // chat takes priority.
   const [agentMappingId, setAgentMappingId] = useState<string | null>(null);
   const [agentIfcClass, setAgentIfcClass] = useState<string | null>(MODEL_ID_DEFAULT_IFC_CLASS);
-  // Chat-driven Filter (Navisworks-style) — takes precedence over
-  // mapping. Set by the agent when it calls
-  // `resaltar_elementos({ filtro })`; cleared by reset / clase_ifc /
-  // seccion_id so the viewer doesn't carry stale filter state across
-  // calls. (RAG-for-IFC interaction step 1.)
   const [agentFilter, setAgentFilter] = useState<Filter | null>(null);
-  // User-driven Filter (Navisworks-style) — set when the user clicks
-  // a row in the cuantificación table. Drives the Highlighter 'filter'
-  // style (yellow tint) in the viewer, NOT the Hider. The agent
-  // filter isolates (Hider); the user selection highlights
-  // (Highlighter). Both can coexist — e.g., agent says "show me
-  // muros" (Hider hides 4295 down to 187) and the user clicks a row
-  // (Highlighter yellows the 7 in that row, visible inside the
-  // Hider-filtered set). Boss clarification 2026-07-30 17:26.
   const [userSelectionFilter, setUserSelectionFilter] = useState<Filter | null>(null);
   const [resetTrigger, setResetTrigger] = useState(0);
   const [selectedElement, setSelectedElement] = useState<ElementProperties | null>(null);
-  // ----- Right pane (Spec PDF | Cuantificación) -----
-  // Active tab id. Auto-switches to "cuantificacion" when the agent
-  // returns a `tabla`; sticky after (user can flip back manually).
-  const [rightPaneTab, setRightPaneTab] = useState<RightPaneTabId>("pdf");
-  // Latest structured table from the agent. Renders inside the
-  // Cuantificación tab. Replaced on each new arrival.
-  const [latestTable, setLatestTable] = useState<QuantificationTable | null>(null);
-  // Boss 2026-07-30 17:48 — synchronize selection between the
-  // cuantificación table and the 3D model. Tracks which row is
-  // currently selected (set by row click OR 3D element click). The
-  // panel highlights this row; Viewer3D uses the corresponding row's
-  // express_ids as the userSelectionFilter (yellow tint).
-  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+  // Stage 1: the ModelPropertyPanel is removed from the grid (returns
+  // as a floating overlay in stage 2). `selectedElement` is still set
+  // by row clicks and 3D element clicks so the stage-2 hookup is
+  // straightforward. Reference the state here so the linter doesn't
+  // trip on the unused declaration; substitute with a real consumer
+  // in stage 2.
+  void selectedElement;
 
-  // ----- PDF viewer state -----
+  // ----- Spec column (PdfViewer | SpecRail) -----
+  // The spec column shows the PdfViewer when the drawer is at peek
+  // (full width = pdfSlotWidth), and the SpecRail otherwise (44px).
+  // We previously kept a separate tab id; the new layout has the
+  // spec as a sibling column and the table as a drawer — no tab.
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfSectionId, setPdfSectionId] = useState<string | null>(null);
 
@@ -159,6 +152,68 @@ export default function App() {
   // ----- Agent status (indexer) -----
   const [agentStatus, setAgentStatus] = useState<AgentStatusState>({ kind: "idle" });
   const indexerStartedRef = useRef(false);
+
+  // ----- Drawer state (stage 1) -----
+  // Stage 1 of the drawer redesign. See .claude/specs/task-drawer-redesign.md.
+  // The drawer lives under the 3D viewer with three states
+  // (peek | expanded | full). State is persisted in localStorage.
+  const [drawerState, setDrawerState] = useState<DrawerState>(() => {
+    try {
+      const raw = window.localStorage.getItem(DRAWER_STATE_KEY);
+      if (isValidDrawerState(raw)) return raw;
+    } catch {
+      // ignore
+    }
+    return "peek";
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DRAWER_STATE_KEY, drawerState);
+    } catch {
+      // ignore
+    }
+  }, [drawerState]);
+
+  // Latest structured table from the agent. When this changes, the
+  // auto-expand effect below drives the drawer.
+  const [latestTable, setLatestTable] = useState<QuantificationTable | null>(null);
+
+  // Boss 2026-07-30 17:48 — synchronize selection between the
+  // cuantificación table and the 3D model.
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+
+  // Anti-intrusion: while a turn is in flight (user message → agent
+  // response), the user can manually collapse the drawer. If they
+  // did, the agent's auto-expand must respect that and only push to
+  // peek (with a badge pulse). The ref resets to false at the start
+  // of each handleSend call.
+  const userHasCollapsedThisTurnRef = useRef(false);
+  const [pulseCounter, setPulseCounter] = useState(0);
+
+  const handleUserCollapsed = useCallback(() => {
+    userHasCollapsedThisTurnRef.current = true;
+  }, []);
+
+  // Auto-expand on a new latestTable. If the user collapsed during
+  // the current turn, only push to peek with a badge pulse.
+  useEffect(() => {
+    if (!latestTable) return;
+    if (userHasCollapsedThisTurnRef.current) {
+      setDrawerState("peek");
+      setPulseCounter((c) => c + 1);
+    } else {
+      setDrawerState("expanded");
+    }
+  }, [latestTable]);
+
+  // Rail click → spec column opens, drawer collapses to peek.
+  // We flip the anti-intrusion flag so the next agent response also
+  // respects the manual collapse.
+  const handleRailClick = useCallback(() => {
+    setDrawerState("peek");
+    userHasCollapsedThisTurnRef.current = true;
+  }, []);
 
   // ----- Lookups -----
   const agentMapping = useMemo(
@@ -211,11 +266,6 @@ export default function App() {
         criterio: `clase IFC ${args.clase_ifc}`,
       };
     }
-    // filtro (Navisworks-style) — plumbed through to Viewer3D via
-    // agentFilter. The viewer evaluates against fragment items and
-    // exposes the actual matching count via the existing isolation
-    // effect; this return value is best-effort because the agent
-    // doesn't have access to the live item array.
     if (args.filtro) {
       setAgentMappingId(null);
       setAgentIfcClass(null);
@@ -250,7 +300,6 @@ export default function App() {
       return { pagina: page, titulo: args.seccion_id, snippet: "", fuente: "seccion_id" };
     }
     if (args.consulta) {
-      // Best-effort: search the spec chunks in IndexedDB for a page match.
       try {
         const { retrieveSnippets } = await import("./agent/retriever");
         const { hits } = await retrieveSnippets(args.consulta, 1, "especificacion");
@@ -278,20 +327,7 @@ export default function App() {
     [resaltar, abrirPdf],
   );
 
-  // ----- Row click in Cuantificación tab → user selection highlight -----
-  // When the user clicks a row in the quantification table, build a
-  // Filter that matches the row's express_ids and route it through
-  // userSelectionFilter (NOT agentFilter). The userSelectionFilter
-  // drives the Highlighter 'filter' style (yellow tint) in the
-  // viewer, while the agentFilter drives the Hider (isolation). For
-  // grouping rows this fans out to every element in the bucket.
-  // Boss clarification 2026-07-30 17:26: the highlight is for user
-  // clicks only; the agent filter still isolates.
-  //
-  // Boss 2026-07-30 17:48 — also set selectedRowIndex so the row in
-  // the table is highlighted (the panel mirrors the click). The
-  // index is looked up by matching the row's express_ids against
-  // latestTable.filas_express_ids.
+  // ----- Row click in Cuantificación drawer → user selection highlight -----
   const handleRowSelect = useCallback((ids: number[]) => {
     if (ids.length === 0) return;
     const rowIndex = latestTable?.filas_express_ids?.findIndex(
@@ -313,11 +349,6 @@ export default function App() {
     };
     setUserSelectionFilter(filter);
 
-    // Boss 2026-08-02 — unify selection state: table row click must
-    // also populate the properties panel (ModelPropertyPanel). Build
-    // a synthetic ElementProperties from the table row's underlying
-    // BIM element data so findBimElement in the panel can resolve
-    // the full PSets/Qtos via the GUID.
     if (latestTable && rowIndex !== -1) {
       const row = latestTable.filas[rowIndex];
       const guid = (row?.element_id ?? row?.guid ?? row?.GlobalId) as string | undefined;
@@ -337,23 +368,22 @@ export default function App() {
   // ----- Send handler -----
 
   const handleSend = useCallback(async (text: string) => {
+    // Reset the anti-intrusion flag at the start of every new turn.
+    // The user is about to send a new message; the agent's auto-expand
+    // for the upcoming response should trigger normally unless the user
+    // collapses the drawer again during this turn.
+    userHasCollapsedThisTurnRef.current = false;
+
     const userMsg: ChatMessage = { id: newMessageId(), role: "user", text };
     setMessages((m) => [...m, userMsg]);
     setBusy(true);
-    const append = (msg: ChatMessage) =>
-      setMessages((m) => [...m, msg]);
+    const append = (msg: ChatMessage) => setMessages((m) => [...m, msg]);
     try {
       const finalText = await runAgentLoop(text, toolContext, {
         onToolCallStart: (name, args) => {
-          append({
-            id: newMessageId(),
-            role: "tool",
-            toolName: name,
-            toolArgs: args,
-          });
+          append({ id: newMessageId(), role: "tool", toolName: name, toolArgs: args });
         },
         onToolCallEnd: (name, result) => {
-          // Patch the last "tool start" bubble with the result summary.
           setMessages((m) => {
             const idx = [...m].reverse().findIndex(
               (mm) => mm.role === "tool" && mm.toolName === name && !mm.toolResult,
@@ -368,15 +398,13 @@ export default function App() {
             copy[realIdx] = { ...target, toolResult: { ok: result.ok, summary } };
             return copy;
           });
-          // Lift the structured `tabla` payload into the right-pane
-          // state and auto-switch the active tab. The chat bubble
-          // already shows the prose summary; the table is the
-          // canonical view.
+          // Lift the structured `tabla` payload into the drawer state.
+          // The auto-expand effect (driven by latestTable) handles the
+          // drawer transition with anti-intrusion.
           if (result.ok && result.tool === "consultar_base_de_conocimiento") {
             const t = result.result.tabla;
             if (t) {
               setLatestTable(t);
-              setRightPaneTab("cuantificacion");
             }
           }
         },
@@ -387,8 +415,6 @@ export default function App() {
           append({ id: newMessageId(), role: "error", error: message });
         },
       });
-      // If the agent didn't emit an onFinalAnswer (rare), make sure
-      // the answer is on screen.
       setMessages((m) => {
         const last = m[m.length - 1];
         if (last?.role === "agent" && last.text === finalText) return m;
@@ -415,19 +441,12 @@ export default function App() {
     setSelectedElement(null);
     setPdfPage(1);
     setPdfSectionId(null);
-    // Clear the Cuantificación tab so the next query starts fresh.
     setLatestTable(null);
-    setRightPaneTab("pdf");
+    setDrawerState("peek");
+    userHasCollapsedThisTurnRef.current = false;
   }, []);
 
   // ----- 3D element click -----
-  // Boss 2026-07-30 17:48 — when the user clicks an element in the
-  // 3D model, find the matching row in the cuantificación table and
-  // highlight it (selectedRowIndex). If the element is in the table,
-  // also update userSelectionFilter so the model's yellow tint
-  // matches the row's elements — bidirectional sync between table
-  // and model. On white space click (empty ifcClass), clear the row
-  // selection but keep userSelectionFilter.
   const handleElementClick = useCallback((data: ElementClickData) => {
     if (!data.ifcClass) {
       setSelectedElement(null);
@@ -456,9 +475,6 @@ export default function App() {
         };
         setUserSelectionFilter(filter);
       } else {
-        // Element not in the table — clear row selection but keep
-        // the existing userSelectionFilter (the user might have
-        // selected a row before clicking elsewhere).
         setSelectedRowIndex(null);
       }
     } else {
@@ -494,9 +510,6 @@ export default function App() {
     });
   }, []);
 
-  // Reset the table row selection when the table is generated,
-  // replaced, or cleared (handleReset sets it to null). Saves each
-  // tool callback from having to clear it themselves.
   useEffect(() => {
     setSelectedRowIndex(null);
   }, [latestTable]);
@@ -520,6 +533,11 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
+  // Spec column width: pdfSlotWidth when the drawer is at peek,
+  // 44px rail otherwise. The CSS transition on the column
+  // (transition: width 240ms ease-out) animates the change.
+  const specColumnWidthPx = drawerState === "peek" ? pdfSlotWidth : SPEC_RAIL_WIDTH;
+
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -542,15 +560,7 @@ export default function App() {
             : undefined
         }
       />
-      <main
-        className={styles.body}
-        style={{
-          // Boss #14917 (follow-up): inline grid-template-columns
-          // so the cuantificacion panel width is user-controlled. The
-          // other three columns keep their minmax cap from the CSS.
-          gridTemplateColumns: `minmax(300px, 340px) ${pdfSlotWidth}px minmax(420px, 1fr) minmax(260px, 320px)`,
-        }}
-      >
+      <main className={styles.body}>
         <aside className={styles.left}>
           <ChatPanel
             messages={messages}
@@ -559,11 +569,13 @@ export default function App() {
             onReset={handleReset}
           />
         </aside>
-        <section className={styles.pdfSlot}>
-          <RightPaneTabs
-            tab={rightPaneTab}
-            onTabChange={setRightPaneTab}
-            pdf={
+        <section
+          className={styles.specColumn}
+          style={{ width: `${specColumnWidthPx}px` }}
+          data-state={drawerState}
+        >
+          {drawerState === "peek" ? (
+            <>
               <PdfViewer
                 pdfUrl="/eett-c.pdf"
                 currentPage={pdfPage}
@@ -575,25 +587,20 @@ export default function App() {
                 }}
                 selectedSectionId={pdfSectionId}
               />
-            }
-            cuantificacion={
-              <QuantificationPanel
-                data={latestTable}
-                onRowSelect={handleRowSelect}
-                selectedRowIndex={selectedRowIndex}
+              <div
+                className={styles.splitter}
+                onMouseDown={startPanelResize}
+                role="separator"
+                aria-label="Ajustar ancho del panel de especificación"
+                aria-orientation="vertical"
+                title="Arrastrar para ajustar ancho"
               />
-            }
-          />
-          <div
-            className={styles.splitter}
-            onMouseDown={startPanelResize}
-            role="separator"
-            aria-label="Ajustar ancho del panel de cuantificación"
-            aria-orientation="vertical"
-            title="Arrastrar para ajustar ancho"
-          />
+            </>
+          ) : (
+            <SpecRail fileName="eett-c.pdf" onClick={handleRailClick} />
+          )}
         </section>
-        <section className={styles.center}>
+        <section className={styles.viewerColumn}>
           <ViewerPane
             mapping={agentMapping}
             selectedIfcClass={agentIfcClass}
@@ -611,10 +618,16 @@ export default function App() {
               setResetTrigger((k) => k + 1);
             }}
           />
+          <CuantificacionDrawer
+            data={latestTable}
+            onRowSelect={handleRowSelect}
+            selectedRowIndex={selectedRowIndex}
+            state={drawerState}
+            onStateChange={setDrawerState}
+            onDragCollapseToPeek={handleUserCollapsed}
+            pulseCounter={pulseCounter}
+          />
         </section>
-        <aside className={styles.right}>
-          <ModelPropertyPanel data={selectedElement} />
-        </aside>
       </main>
     </div>
   );

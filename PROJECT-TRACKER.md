@@ -232,3 +232,18 @@ out. This is a major scope-down from the research report.
 - This turn: `git init` + first commit + `gh repo create` + push.
 - This turn: dispatch `webdev-marvin` sub-agent with the spec.
 - Architect reviews the diff, runs gates, commits, reports to Boss.
+
+## Session log — 2026-08-04
+
+### v1.1 — viewer experience pass 1 (Boss 09:50 CLT)
+
+Locked two improvements on `src/viewer/Viewer3D.tsx`:
+
+1. **`camera.controls.addEventListener("update", () => fragments.core.update())`** — adopted from `engine_components/packages/core/src/core/Worlds/example.ts`. Eliminates the perception of rigid / laggy navigation by repainting fragments on every camera tick.
+2. **Click-vs-drag pointer split** — replaced the previous `pointerdown`-only async castRay with `pointerdown` / `pointermove` / `pointerup` / `pointercancel` + `setPointerCapture`. The previous flow raced against camera-controls, so a click+drag (camera orbit) would resolve the castRay against the new camera state and clear the selection. New flow: only picks on `pointerup` if the pointer moved less than `DRAG_THRESHOLD_PX = 5` from its down position. Drags preserve the active selection.
+
+Style polish from the same example file:
+- `world.renderer.showLogo = false` (branded as Salfa BIM Agent 01 — no upstream watermark).
+- Removed redundant `renderer.three.setClearColor` call. `scene.three.background` remains as the single source of truth for the background.
+
+**Commit pending** (to be `feat(viewer): TOE Worlds/example.ts styling + click-vs-drag pointer handling`).

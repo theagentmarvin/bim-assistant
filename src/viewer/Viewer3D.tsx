@@ -139,11 +139,35 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
     const c = new OBC.Components(); compR.current = c;
     const w = c.get(OBC.Worlds).create<OBC.SimpleScene, OBC.OrthoPerspectiveCamera, OBC.SimpleRenderer>();
     w.scene = new OBC.SimpleScene(c); w.scene.setup();
+    // Solid neutral background — `scene.three.background` is the source
+    // of truth, the renderer.clearColor fallback is unnecessary (the
+    // example Worlds/example.ts uses `scene.three.background = null`;
+    // we keep a solid color since the viewer sits inside a styled card
+    // and a transparent background would leak the card chrome through).
     w.scene.three.background = new THREE.Color(0xf2f3f4);
-    if (w.renderer) w.renderer.three.setClearColor(0xf2f3f4, 1);
+    // Branding: hide the "That Open Company" watermark. The viewer is
+    // shipped as Salfa BIM Agent 01 — the upstream logo is off by
+    // default in our deployment. (TOE Worlds/example.ts shows
+    // `showLogo = true`; we opt out for product consistency.)
     w.renderer = new OBC.SimpleRenderer(c, cr.current);
+    if (w.renderer) (w.renderer as unknown as { showLogo?: boolean }).showLogo = false;
     w.camera = new OBC.OrthoPerspectiveCamera(c);
     w.camera.controls!.setLookAt(15, 15, 15, 0, 0, 0);
+    // Live re-render during navigation. Without this listener the
+    // fragments manager doesn't repaint between camera ticks and orbit
+    // / zoom feels rigid / laggy. This is the canonical TOE pattern from
+    // engine_components packages/core/src/core/Worlds/example.ts:
+    //     world.camera.controls.addEventListener("update",
+    //       () => fragments.core.update());
+    // fragsR is the closure-captured FragmentsManager from below; it's
+    // set before this init IIFE observes any pointer events, so it's
+    // safe to reference here. We attach the listener to the controls
+    // directly (no "change" handler) — "update" fires only on input/
+    // programmatic camera changes, which is exactly what we want.
+    w.camera.controls!.addEventListener("update", () => {
+      const fr = fragsR.current;
+      if (fr) void fr.core.update();
+    });
     worldR.current = w; c.init();
     const frags = c.get(OBC.FragmentsManager); fragsR.current = frags;
     const stale = () => compR.current !== c;
@@ -239,7 +263,10 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
         // out selectedElement. The panel flicker that the user saw is now
         // eliminated.
 
-        // Custom click handler — replaces autoHighlightOnClick.
+        // Custom click handler — replaces autoHighlightOnClick. Owns
+        // the full down/move/up cycle so we can distinguish a click
+        // (pick on release) from a drag (camera orbit, no pick,
+        // preserve selection).
         //
         // Why we disabled autoHighlightOnClick (see hl.setup() above):
         //  * It synchronously applies SELECT_MAT on every click, including
@@ -252,16 +279,61 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
         //    wiping the property panel even when the new click is on an
         //    off-filter element.
         //
-        // This handler owns the click loop instead. It runs the raycaster,
-        // picks the frontmost hit, and applies SELECT_MAT via
-        // hl.highlightByID(..., removePrevious:true). On white space it
-        // calls clear('select') so the panel empties. The 'filter' style
-        // (yellow) is independent — clicks on any element work, filter
-        // is purely visual aid. The highlighter's "select takes precedence
-        // over custom" rule means a clicked element that's also in the
-        // filter shows orange over yellow until deselected.
-        const onPointerDown = async (ev: PointerEvent) => {
+        // v9 (Boss 2026-08-04 09:50): split into pointerdown / move / up
+        // with a DRAG_THRESHOLD guard. The previous handler did the
+        // castRay synchronously *on pointerdown*. That meant a click
+        // followed by a drag (a camera orbit) left the ray's resolution
+        // racing with the camera-controls motion: by the time
+        // castRay resolved, the GPU pick pass saw a stale frame, the
+        // hit often resolved to empty space, and the handler cleared
+        // 'select' — stealing the user's selection on what felt like a
+        // normal orbit. The fix: only cast on pointerup, only when the
+        // pointer moved less than DRAG_THRESHOLD_PX from the down
+        // position. setPointerCapture ensures we still receive the up
+        // event when the cursor leaves the canvas mid-drag (important
+        // for trackpad gestures that overshoot the viewport).
+        const DRAG_THRESHOLD_PX = 5;
+        type DragInfo = { x: number; y: number; pointerId: number };
+        let dragInfoR: DragInfo | null = null;
+        let isDraggingR = false;
+        const resetDrag = () => { dragInfoR = null; isDraggingR = false; };
+
+        const onPointerDown = (ev: PointerEvent) => {
           if (ev.button !== 0) return;                                  // left-click only
+          if (disR.current || !loadedR.current) return;
+          if (!cr.current) return;
+          // Defer the raycast until pointerup so we can distinguish
+          // a click (pick) from a drag (preserve selection). Capture
+          // the pointer so pointermove/pointerup still fire on the
+          // canvas even if the cursor leaves the bounds mid-drag.
+          dragInfoR = { x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId };
+          isDraggingR = false;
+          try { cr.current.setPointerCapture(ev.pointerId); } catch { /* */ }
+        };
+
+        const onPointerMove = (ev: PointerEvent) => {
+          if (!dragInfoR || dragInfoR.pointerId !== ev.pointerId) return;
+          const dx = ev.clientX - dragInfoR.x;
+          const dy = ev.clientY - dragInfoR.y;
+          // Hypotenuse: Euclidean distance. 5px is forgiving enough
+          // for trackpad jitter without accidentally treating a real
+          // click as a drag. yomotsu/camera-controls (the controls TOE
+          // wraps) uses a similar magnitude internally for its own
+          // click-vs-drag separation, so we're aligned with the
+          // library's threshold semantics.
+          if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) isDraggingR = true;
+        };
+
+        const onPointerUp = async (ev: PointerEvent) => {
+          if (ev.button !== 0) return;
+          if (!dragInfoR || dragInfoR.pointerId !== ev.pointerId) return;
+          const wasDragging = isDraggingR;
+          const upX = ev.clientX;
+          const upY = ev.clientY;
+          resetDrag();
+          try { cr.current?.releasePointerCapture(ev.pointerId); } catch { /* */ }
+          if (wasDragging) return;  // drag — preserve selection, do not pick
+
           if (disR.current || !loadedR.current) return;
           if (!cr.current) return;
           const items = itemsR.current; if (!items) return;
@@ -271,8 +343,8 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
 
           const rect = cr.current.getBoundingClientRect();
           const mouse = new THREE.Vector2(
-            ((ev.clientX - rect.left) / rect.width)  *  2 - 1,
-            -((ev.clientY - rect.top) / rect.height) *  2 + 1,
+            ((upX - rect.left) / rect.width)  *  2 - 1,
+            -((upY - rect.top) / rect.height) *  2 + 1,
           );
 
           // Use OBC's GPU-based picker — the canonical pipeline that
@@ -298,14 +370,10 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
               })
             | null;
           if (!hit || hit.localId === undefined || hit.localId === null) {
-            // Empty space click — emit setSelectedElement(null) directly.
+            // Empty-space click — emit setSelectedElement(null) directly.
             // The onClear event handler above is intentionally a no-op
             // (see the rationale there), so this branch is the only path
-            // that nulls out the panel for a true deselect. (Per Boss
-            // directive 2026-07-26 20:10:39 — fix the
-            // "selection glitches on click" symptom by stopping the
-            // panel from being emptied during legitimate onHighlight
-            // re-applications on the same element.)
+            // that nulls out the panel for a true deselect.
             void hl.clear("select").catch(() => {});
             clickR.current?.({ ifcClass: "", name: "", expressID: 0, modelId: "" });
             dataR.current?.(null as unknown as ElementProperties);
@@ -316,23 +384,36 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
           if (!items[localId]) return;  // hit an element not in our items map
 
           // Valid pick — manually invoke the Highlighter's pick flow so the
-          // existing onHighlight handler runs. The previous
-          // matchingSetR-ghost-filter branch is gone: standard viewer
+          // existing onHighlight handler runs. Standard viewer
           // behavior is "click any element to select it", regardless of
-          // whether it's part of the active filter highlight. The user
-          // can still click an off-filter element and inspect its props
-          // — the filter highlight is purely a visual aid for the
-          // agent-driven query result.
+          // whether it's part of the active filter highlight. The 'filter'
+          // style (yellow) is purely a visual aid for the agent-driven
+          // query result; clicks on off-filter elements still work.
           void hl.highlightByID(
             "select",
             { [MODEL_ID]: new Set([localId]) },
             true,                         // removePrevious: clear prior selection first
           ).catch(() => {});
         };
+
+        const onPointerCancel = (ev: PointerEvent) => {
+          if (!dragInfoR || dragInfoR.pointerId !== ev.pointerId) return;
+          resetDrag();
+          try { cr.current?.releasePointerCapture(ev.pointerId); } catch { /* */ }
+        };
+
         if (cr.current) {
           cr.current.addEventListener("pointerdown", onPointerDown);
+          cr.current.addEventListener("pointermove", onPointerMove);
+          cr.current.addEventListener("pointerup", onPointerUp);
+          cr.current.addEventListener("pointercancel", onPointerCancel);
           pointerDownCleanup = () => {
-            if (cr.current) cr.current.removeEventListener("pointerdown", onPointerDown);
+            if (cr.current) {
+              cr.current.removeEventListener("pointerdown", onPointerDown);
+              cr.current.removeEventListener("pointermove", onPointerMove);
+              cr.current.removeEventListener("pointerup", onPointerUp);
+              cr.current.removeEventListener("pointercancel", onPointerCancel);
+            }
           };
         }
       }

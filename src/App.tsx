@@ -53,14 +53,14 @@ const PDF_SLOT_WIDTH_DEFAULT = 420;
 const PDF_SLOT_WIDTH_MIN = 280;
 const PDF_SLOT_WIDTH_MAX = 1000;
 
-// Stage 1 (drawer redesign): drawer state persistence. Validated on
-// restore to avoid a stuck drawer if localStorage got corrupted.
-const DRAWER_STATE_KEY = "bim-assistant:drawerState";
+// Boss 2026-08-05 — drawer state is intentionally NOT persisted.
+// The drawer always starts collapsed (peek) on every app load, so
+// a fresh session opens with an unobtrusive handle and the spec
+// column at full width. The agent's auto-expand effect on
+// `latestTable` change (see below) is the only path that opens the
+// drawer — a user who previously expanded it during testing
+// shouldn't carry that state across reloads.
 const SPEC_RAIL_WIDTH = 44;
-
-function isValidDrawerState(v: unknown): v is DrawerState {
-  return v === "peek" || v === "expanded" || v === "full";
-}
 
 export default function App() {
   const { mappings } = useMemo(() => loadMappings(), []);
@@ -154,26 +154,12 @@ export default function App() {
   const indexerStartedRef = useRef(false);
 
   // ----- Drawer state (stage 1) -----
-  // Stage 1 of the drawer redesign. See .claude/specs/task-drawer-redesign.md.
-  // The drawer lives under the 3D viewer with three states
-  // (peek | expanded | full). State is persisted in localStorage.
-  const [drawerState, setDrawerState] = useState<DrawerState>(() => {
-    try {
-      const raw = window.localStorage.getItem(DRAWER_STATE_KEY);
-      if (isValidDrawerState(raw)) return raw;
-    } catch {
-      // ignore
-    }
-    return "peek";
-  });
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(DRAWER_STATE_KEY, drawerState);
-    } catch {
-      // ignore
-    }
-  }, [drawerState]);
+  // Boss 2026-08-05 — always reset to "peek" on app load. The agent
+  // pulls the drawer up to "expanded" when it generates a table
+  // (auto-expand effect below); the user can still drag / click to
+  // move it to other states within the session, but those don't
+  // survive a reload.
+  const [drawerState, setDrawerState] = useState<DrawerState>("peek");
 
   // Latest structured table from the agent. When this changes, the
   // auto-expand effect below drives the drawer.

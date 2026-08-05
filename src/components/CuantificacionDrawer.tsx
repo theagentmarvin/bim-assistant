@@ -1,14 +1,12 @@
 // src/components/CuantificacionDrawer.tsx
 //
-// Bottom-anchored drawer under the 3D viewer. Three states with
-// locked pixel heights (peek | expanded | full). Top edge is a
-// click-to-toggle handle — drag-to-resize was retired entirely
-// because it kept racing with click detection on touchpad jitter
-// (Boss 2026-08-05 11:06: "deactivate the draw to adjutst size
-// on the cuantification table, remove it since its the main
-// issue right now").
+// Bottom-anchored drawer under the 3D viewer. Two states:
+// closed (40px handle only) and open (40% viewport height with
+// the table). The handle is a click-to-toggle button — Boss
+// 2026-08-05 11:40 retired the height-adjust affordance (drag-to-
+// resize + full state + grip pill) because it kept racing with
+// click detection and the user only wants a binary toggle.
 //
-// Stage 1 of the drawer redesign.
 // Parent owns the drawer state, persistence, auto-expand, and the
 // pulse trigger. This component owns the toggle handler, the
 // height math, and the body fade-in.
@@ -18,16 +16,14 @@ import QuantificationPanel from "./QuantificationPanel";
 import type { QuantificationTable } from "../quantification/types";
 import styles from "./CuantificacionDrawer.module.css";
 
-export type DrawerState = "peek" | "expanded" | "full";
+export type DrawerState = "closed" | "open";
 
-// Locked pixel heights. Resolved against `window.innerHeight` for
-// the vh-keyed states — the component listens for viewport resize
-// and re-renders so the heights stay accurate when the window
-// changes.
-const PEEK_HEIGHT = 40;
-const EXPANDED_RATIO = 0.4;
-const FULL_RATIO = 0.95;
-const FULL_MIN_FREE = 80;
+// Locked pixel heights. Closed is the handle strip; open is a
+// share of viewport height. The component listens for viewport
+// resize and re-renders so the open height stays accurate when
+// the window changes.
+const CLOSED_HEIGHT = 40;
+const OPEN_RATIO = 0.4;
 
 interface Props {
   data: QuantificationTable | null;
@@ -35,12 +31,12 @@ interface Props {
   selectedRowIndex?: number | null;
   state: DrawerState;
   onStateChange: (s: DrawerState) => void;
-  /** Fired when the user manually collapses from a non-peek state.
+  /** Fired when the user manually collapses from an open state.
    *  Parent uses this to set the `userHasCollapsedThisTurn` flag so
    *  the agent auto-expand respects the anti-intrusion rule. */
-  onDragCollapseToPeek?: () => void;
+  onUserCollapse?: () => void;
   /** Bump to fire the badge pulse animation once (typical when
-   *  the agent pushes to peek because the user collapsed
+   *  the agent pushes to closed because the user collapsed
    *  manually). */
   pulseCounter: number;
 }
@@ -51,7 +47,7 @@ export default function CuantificacionDrawer({
   selectedRowIndex,
   state,
   onStateChange,
-  onDragCollapseToPeek,
+  onUserCollapse,
   pulseCounter,
 }: Props) {
   const [viewportHeight, setViewportHeight] = useState<number>(
@@ -65,9 +61,8 @@ export default function CuantificacionDrawer({
   }, []);
 
   const heightForState = (s: DrawerState): number => {
-    if (s === "peek") return PEEK_HEIGHT;
-    if (s === "expanded") return viewportHeight * EXPANDED_RATIO;
-    return Math.min(viewportHeight * FULL_RATIO, viewportHeight - FULL_MIN_FREE);
+    if (s === "closed") return CLOSED_HEIGHT;
+    return viewportHeight * OPEN_RATIO;
   };
 
   const drawerHeight = useMemo(
@@ -75,35 +70,27 @@ export default function CuantificacionDrawer({
     [state, viewportHeight],
   );
 
-  // Boss 2026-08-05 11:06 — handle is click-only. Drag-to-resize is
-  // retired entirely (it was the root cause of every close→reopen
-  // and click-vs-touchpad race). Toggle semantics:
-  //   peek    → click → expanded
-  //   expanded → click → peek
-  //   full    → click → peek
-  // The chevron icon still rotates up↔down to indicate the
-  // current state's direction.
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (state === "peek") {
-      onStateChange("expanded");
+  // Toggle semantics: closed → open, open → closed.
+  // Manual collapse from open → fire the anti-intrusion callback
+  // so the next agent response doesn't auto-reopen the drawer over
+  // the user's collapse.
+  const handleClick = () => {
+    if (state === "closed") {
+      onStateChange("open");
     } else {
-      // Manual collapse from a non-peek state → fire the
-      // anti-intrusion callback so the next agent response
-      // doesn't auto-reopen the drawer over the user's collapse.
-      onDragCollapseToPeek?.();
-      onStateChange("peek");
+      onUserCollapse?.();
+      onStateChange("closed");
     }
   };
 
   // Body fade-in: 80ms after the slide starts. Achieved by
-  // holding the body at opacity 0 for 80ms after the state leaves
-  // peek, then flipping to opacity 1. The CSS transition (200ms)
-  // means the body is fully visible at ~280ms — slightly after the
-  // slide ends.
-  const [bodyVisible, setBodyVisible] = useState<boolean>(state !== "peek");
+  // holding the body at opacity 0 for 80ms after the state opens,
+  // then flipping to opacity 1. The CSS transition (200ms) means
+  // the body is fully visible at ~280ms — slightly after the slide
+  // ends.
+  const [bodyVisible, setBodyVisible] = useState<boolean>(state === "open");
   useEffect(() => {
-    if (state === "peek") {
+    if (state === "closed") {
       setBodyVisible(false);
       return;
     }
@@ -136,18 +123,22 @@ export default function CuantificacionDrawer({
         transition: "height 240ms cubic-bezier(0.2, 0.8, 0.2, 1)",
       }}
       data-state={state}
-      aria-expanded={state !== "peek"}
+      aria-expanded={state === "open"}
     >
-      <div
+      <button
+        type="button"
         className={styles.handle}
-        onMouseDown={handleClick}
-        role="button"
-        aria-label="Click para expandir o colapsar la cuantificación"
-        title="Click para expandir / colapsar"
+        onClick={handleClick}
+        aria-label={
+          state === "closed"
+            ? "Expandir cuantificación"
+            : "Cerrar cuantificación"
+        }
+        aria-expanded={state === "open"}
+        title={state === "closed" ? "Expandir" : "Cerrar"}
       >
-        <span className={styles.handleGrip} aria-hidden="true" />
         <span
-          className={`${styles.handleChevron} ${state === "peek" ? styles.handleChevronUp : styles.handleChevronDown}`}
+          className={`${styles.handleChevron} ${state === "closed" ? styles.handleChevronUp : styles.handleChevronDown}`}
           aria-hidden="true"
         >
           ‹
@@ -161,8 +152,8 @@ export default function CuantificacionDrawer({
             </span>
           )}
         </div>
-      </div>
-      {state !== "peek" && (
+      </button>
+      {state === "open" && (
         <div className={`${styles.body} ${bodyVisible ? styles.bodyVisible : ""}`}>
           <QuantificationPanel
             data={data}

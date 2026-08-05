@@ -154,12 +154,13 @@ export default function App() {
   const indexerStartedRef = useRef(false);
 
   // ----- Drawer state (stage 1) -----
-  // Boss 2026-08-05 10:38 — start EXPANDED so the cuantificación
+  // Boss 2026-08-05 11:40 — simplified to a binary toggle (closed
+  // | open). The handle is a click-to-toggle button; no
+  // height-adjust affordance. Start OPEN so the cuantificación
   // panel is visible on app load. The user can collapse it
-  // manually via the handle's chevron icon (which rotates up→
-  // down to indicate the toggle); the agent's auto-expand effect
+  // manually via the same button; the agent's auto-expand effect
   // below is unchanged and still fires when latestTable changes.
-  const [drawerState, setDrawerState] = useState<DrawerState>("expanded");
+  const [drawerState, setDrawerState] = useState<DrawerState>("open");
 
   // Boss 2026-08-05 09:42 — spec column starts CLOSED. Independent
   // of drawerState: the user clicks the SpecRail to open the spec
@@ -189,14 +190,14 @@ export default function App() {
   }, []);
 
   // Auto-expand on a new latestTable. If the user collapsed during
-  // the current turn, only push to peek with a badge pulse.
+  // the current turn, only push to closed with a badge pulse.
   useEffect(() => {
     if (!latestTable) return;
     if (userHasCollapsedThisTurnRef.current) {
-      setDrawerState("peek");
+      setDrawerState("closed");
       setPulseCounter((c) => c + 1);
     } else {
-      setDrawerState("expanded");
+      setDrawerState("open");
     }
   }, [latestTable]);
 
@@ -437,11 +438,11 @@ export default function App() {
     setPdfPage(1);
     setPdfSectionId(null);
     setLatestTable(null);
-    // Boss 2026-08-05 10:38 — reset to the new default ("expanded"),
-    // matching the initial state. Earlier this was "peek"; that
-    // made sense when the default was "peek", but with the
-    // default now "expanded" the ⟳ button should return to it.
-    setDrawerState("expanded");
+    // Boss 2026-08-05 11:40 — reset to the default ("open"), matching
+    // the initial state. Earlier this was "expanded"; with the
+    // binary closed/open model the button now starts and resets to
+    // the same state.
+    setDrawerState("open");
     setSpecOpen(false);
     userHasCollapsedThisTurnRef.current = false;
   }, []);
@@ -625,7 +626,7 @@ export default function App() {
             selectedRowIndex={selectedRowIndex}
             state={drawerState}
             onStateChange={setDrawerState}
-            onDragCollapseToPeek={handleUserCollapsed}
+            onUserCollapse={handleUserCollapsed}
             pulseCounter={pulseCounter}
           />
         </section>

@@ -10,6 +10,15 @@
 // Parent owns the drawer state, persistence, auto-expand, and the
 // pulse trigger. This component owns the toggle handler, the
 // height math, and the body fade-in.
+//
+// Toggle trigger: onMouseDown + onKeyDown, NOT onClick. The
+// <button>'s native click event is canceled by Chrome when the
+// pointer moves more than ~5px between mousedown and mouseup —
+// and real human clicks have touchpad jitter larger than that.
+// The previous code (8a1bb8d → 592d5a3) used onMouseDown for
+// exactly this reason. The 11:40 refactor lost it; restored
+// here. Keyboard activation (Enter/Space) is handled via
+// onKeyDown so the button stays focusable.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import QuantificationPanel from "./QuantificationPanel";
@@ -74,12 +83,28 @@ export default function CuantificacionDrawer({
   // Manual collapse from open → fire the anti-intrusion callback
   // so the next agent response doesn't auto-reopen the drawer over
   // the user's collapse.
-  const handleClick = () => {
+  const toggle = () => {
     if (state === "closed") {
       onStateChange("open");
     } else {
       onUserCollapse?.();
       onStateChange("closed");
+    }
+  };
+
+  // Mouse handler — fires on press, before any mouse-movement
+  // cancellation. Ignores non-primary buttons (right-click, etc.).
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    toggle();
+  };
+
+  // Keyboard handler — Enter/Space toggles. preventDefault stops
+  // the button's default click event from firing a second time.
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle();
     }
   };
 
@@ -128,7 +153,8 @@ export default function CuantificacionDrawer({
       <button
         type="button"
         className={styles.handle}
-        onClick={handleClick}
+        onMouseDown={handleMouseDown}
+        onKeyDown={handleKeyDown}
         aria-label={
           state === "closed"
             ? "Expandir cuantificación"

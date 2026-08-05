@@ -81,6 +81,34 @@
   transform-origin: center;
 }
 
+/* Boss 2026-08-05 10:38 — chevron icon that mirrors the spec
+ * column's ‹ pattern. Default ‹ points left (the spec rail /
+ * PdfViewer header use this). For the bottom-anchored drawer we
+ * rotate it: 90° CW → points up = "expand up from peek"; −90°
+ * → points down = "collapse down from expanded / full".
+ * CSS transition (200ms ease) on transform so the chevron flips
+ * smoothly when the drawer state changes. */
+.handleChevron {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ff-text-secondary);
+  margin-right: 6px;
+  transition: transform 200ms ease, color 150ms ease;
+}
+
+.handleChevronUp {
+  transform: rotate(90deg);
+}
+
+.handleChevronDown {
+  transform: rotate(-90deg);
+}
+
+.handle:hover .handleChevron {
+  color: var(--ff-text-primary);
+}
+
 .handleBadgeLabel {
   color: var(--ff-text-primary);
 }

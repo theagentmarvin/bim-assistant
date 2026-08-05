@@ -239,6 +239,12 @@ export default function CuantificacionDrawer({
         title="Arrastrar para ajustar alto"
       >
         <span className={styles.handleGrip} aria-hidden="true" />
+        <span
+          className={`${styles.handleChevron} ${state === "peek" ? styles.handleChevronUp : styles.handleChevronDown}`}
+          aria-hidden="true"
+        >
+          ‹
+        </span>
         <div className={`${styles.handleBadge} ${pulse ? styles.handleBadgePulse : ""}`}>
           <span className={styles.handleBadgeLabel}>Cuantificación</span>
           {meta && <span className={styles.handleBadgeMeta}>· {meta}</span>}

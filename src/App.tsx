@@ -154,12 +154,12 @@ export default function App() {
   const indexerStartedRef = useRef(false);
 
   // ----- Drawer state (stage 1) -----
-  // Boss 2026-08-05 — always reset to "peek" on app load. The agent
-  // pulls the drawer up to "expanded" when it generates a table
-  // (auto-expand effect below); the user can still drag / click to
-  // move it to other states within the session, but those don't
-  // survive a reload.
-  const [drawerState, setDrawerState] = useState<DrawerState>("peek");
+  // Boss 2026-08-05 10:38 — start EXPANDED so the cuantificación
+  // panel is visible on app load. The user can collapse it
+  // manually via the handle's chevron icon (which rotates up→
+  // down to indicate the toggle); the agent's auto-expand effect
+  // below is unchanged and still fires when latestTable changes.
+  const [drawerState, setDrawerState] = useState<DrawerState>("expanded");
 
   // Boss 2026-08-05 09:42 — spec column starts CLOSED. Independent
   // of drawerState: the user clicks the SpecRail to open the spec
@@ -437,7 +437,11 @@ export default function App() {
     setPdfPage(1);
     setPdfSectionId(null);
     setLatestTable(null);
-    setDrawerState("peek");
+    // Boss 2026-08-05 10:38 — reset to the new default ("expanded"),
+    // matching the initial state. Earlier this was "peek"; that
+    // made sense when the default was "peek", but with the
+    // default now "expanded" the ⟳ button should return to it.
+    setDrawerState("expanded");
     setSpecOpen(false);
     userHasCollapsedThisTurnRef.current = false;
   }, []);

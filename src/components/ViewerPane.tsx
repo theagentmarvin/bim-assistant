@@ -39,11 +39,18 @@ interface Props {
   onElementData?: (data: ElementProperties) => void;
   /** Bump to soft-reset the 3D viewer. */
   resetTrigger?: number;
-  /** Callback fired by the floating Reset View button (anchored
-   *  under the NavCube inside Viewer3D). Same surface as the old
-   *  toolbar button — App.tsx wires the same `handleResetViewer`
-   *  callback that the parent state expects. */
+  /** Callback fired by the Reset View icon in the viewer tools toolbar
+   *  (under the NavCube). Same surface as the previous floating
+   *  button — App.tsx wires the same `handleResetViewer` callback. */
   onResetViewer?: () => void;
+  /** Callback fired by the Properties Panel toggle icon. Toggles the
+   *  visibility of the PropertiesOverlay (independent of whether an
+   *  element is currently selected). Optional: if not provided, the
+   *  toggle icon is not rendered. */
+  onToggleProperties?: () => void;
+  /** Current state of the PropertiesOverlay. Drives the toggle icon's
+   *  active styling via `data-active`. Optional. */
+  propertiesVisible?: boolean;
 }
 
 export default function ViewerPane({
@@ -55,6 +62,8 @@ export default function ViewerPane({
   onElementData,
   resetTrigger,
   onResetViewer,
+  onToggleProperties,
+  propertiesVisible,
 }: Props) {
   return (
     <div className={styles.pane}>
@@ -68,6 +77,8 @@ export default function ViewerPane({
           onElementData={onElementData}
           resetTrigger={resetTrigger}
           onResetView={onResetViewer}
+          onToggleProperties={onToggleProperties}
+          propertiesVisible={propertiesVisible}
         />
       </div>
     </div>

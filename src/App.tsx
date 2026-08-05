@@ -139,6 +139,14 @@ export default function App() {
   const [userSelectionFilter, setUserSelectionFilter] = useState<Filter | null>(null);
   const [resetTrigger, setResetTrigger] = useState(0);
   const [selectedElement, setSelectedElement] = useState<ElementProperties | null>(null);
+  // Boss 2026-08-05 19:40 — PropertiesOverlay visibility is now
+  // independent from `selectedElement`. The viewer tools toolbar
+  // has a toggle button (eye icon) that flips this flag. Default
+  // `true` so the initial behavior matches before the toggle existed
+  // (overlay shows whenever an element is selected). The × on the
+  // overlay still clears the selection data (unchanged); the toggle
+  // is purely a visibility gate on top of that.
+  const [propertiesVisible, setPropertiesVisible] = useState<boolean>(true);
 
   // ----- Spec column (PdfViewer | SpecRail) -----
   // The spec column shows the PdfViewer when the drawer is at peek
@@ -517,6 +525,15 @@ export default function App() {
     }
   }, [toolContext, newMessageId]);
 
+  // Boss 2026-08-05 19:40 — Properties Panel toggle for the
+  // viewer tools toolbar (under the NavCube). Click flips the
+  // visibility gate; the overlay itself still requires
+  // `selectedElement` to be truthy, so a toggled-off panel
+  // doesn't resurrect stale data.
+  const handleToggleProperties = useCallback(() => {
+    setPropertiesVisible((v) => !v);
+  }, []);
+
   const handleReset = useCallback(() => {
     setMessages([]);
     setAgentIfcClass(null);
@@ -538,6 +555,9 @@ export default function App() {
     setDrawerState("open");
     setSpecOpen(false);
     setSidebarFilterIds(null);
+    // Boss 2026-08-05 19:40 — full reset also restores the
+    // PropertiesOverlay visibility to its default (on).
+    setPropertiesVisible(true);
     userHasCollapsedThisTurnRef.current = false;
   }, []);
 
@@ -762,11 +782,19 @@ export default function App() {
                 setSelectedElement(null);
                 setResetTrigger((k) => k + 1);
               }}
+              onToggleProperties={handleToggleProperties}
+              propertiesVisible={propertiesVisible}
             />
-            <PropertiesOverlay
-              data={selectedElement}
-              onClose={() => setSelectedElement(null)}
-            />
+            {/* Boss 2026-08-05 19:40 — the overlay now requires both
+                a selected element AND the visibility gate to be on.
+                The toolbar toggle flips the gate; the × on the overlay
+                itself still clears the selection (unchanged). */}
+            {selectedElement && propertiesVisible && (
+              <PropertiesOverlay
+                data={selectedElement}
+                onClose={() => setSelectedElement(null)}
+              />
+            )}
           </div>
           <CuantificacionDrawer
             data={latestTable}

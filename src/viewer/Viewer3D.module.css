@@ -86,49 +86,123 @@
   margin-right: 6px;
 }
 
-/* Floating Reset View button — anchored under the NavCube
- * (top-right corner of the canvas). 128px wide matches the cube
- * width for visual alignment; sits 8px below the cube's bottom
- * edge (10 + 128 + 8 = 146). z-index 12 keeps it above the cube's
- * 11 while remaining below error overlays. Same hover/active
- * language as the cube wrapper so the affordance reads as part
- * of the viewer chrome.
+/* Viewer tools toolbar — anchored under the NavCube (top-right
+ * corner of the canvas). 36px wide × N+gap tall (one column of
+ * square buttons). Sits 8px below the cube's bottom edge
+ * (10 + 128 + 8 = 146). z-index 12 keeps the toolbar above the
+ * cube's 11 while remaining below any future modal/overlay.
  *
- * Boss 2026-08-05 19:20 — this replaces the previous toolbar-row
- * Reset button that used to live in ViewerPane. Anchoring it under
- * the cube keeps it contextual to the viewer without burning a
- * horizontal row in the layout. */
-.floatingResetBtn {
+ * Boss 2026-08-05 19:40 — replaces the previous single floating
+ * Reset button (`.floatingResetBtn`). Now hosts rectangular
+ * icon-only buttons (Reset View + Properties Panel toggle, with
+ * room for future viewer-related tools). The container itself is
+ * transparent; each button carries its own chrome (panel-tone
+ * background, border, hover/active states) so the viewer canvas
+ * shows through the gaps between buttons.
+ *
+ * Boss 2026-08-05 19:45 — layout flipped from horizontal row to
+ * vertical column. Each button is now a 36×36 square (same width
+ * as the previous 36px height), and the column is centered
+ * horizontally under the 128px NavCube. The right offset 56px is
+ * computed as ((128 - 36) / 2) + 10 — i.e. half the empty space
+ * between the cube's centerline and its edges, plus the cube's
+ * own 10px gutter from the viewer right edge.
+ *
+ * Future-proof: more viewer-related tools can be added as
+ * additional `.toolbarBtn` siblings in Viewer3D.tsx without
+ * restructuring this CSS. The container width stays fixed at 36px
+ * regardless of button count; height grows linearly. If the
+ * column ever exceeds the cube's 128px height, consider moving it
+ * to the left edge of the viewer instead. */
+.viewerToolsToolbar {
   position: absolute;
   top: 146px;
-  right: 10px;
-  width: 128px;
-  height: 36px;
+  right: 56px;
+  width: 36px;
   z-index: 12;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  background: var(--ff-bg-panel);
+  pointer-events: auto;
+  background: transparent;
+}
+
+.toolbarBtn {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.78);
   border: 1px solid var(--ff-border);
   border-radius: 4px;
   color: var(--ff-text-primary);
   font-family: var(--ff-font-stack);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 15px;
+  line-height: 1;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(4px);
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease, transform 80ms ease;
 }
 
-.floatingResetBtn:hover {
+.toolbarBtn:hover {
   background: var(--ff-blue-active);
   color: #fff;
   border-color: var(--ff-blue-active);
 }
 
-.floatingResetBtn:active {
+.toolbarBtn:active {
   transform: translateY(1px);
+}
+
+/* Active state — used by the Properties Panel toggle to indicate
+ * that the overlay is currently visible. Solid brand fill so the
+ * state is unambiguous at a glance; hover keeps the same fill but
+ * deepens the color slightly so the user gets feedback that the
+ * click registered. */
+.toolbarBtn[data-active="true"] {
+  background: var(--ff-blue-active);
+  color: #fff;
+  border-color: var(--ff-blue-active);
+}
+
+.toolbarBtn[data-active="true"]:hover {
+  background: #7a181c;
+  border-color: #7a181c;
+}
+
+/* NavCube theming — Boss 2026-08-05 19:45 — swap TOE's default
+ * face palette (cyan / purple / deep blue) for Salfa theme tokens
+ * so the cube reads as part of the app's palette. The
+ * bim-view-cube LitElement consumes CSS custom properties on its
+ * axis classes:
+ *
+ *   --bim-view-cube_x--bgc  → left + right face fill (X axis)
+ *   --bim-view-cube_y--bgc  → front + back face fill (Y axis)
+ *   --bim-view-cube_z--bgc  → top + bottom face fill (Z axis)
+ *   --bim-view-cube--c     → text color on faces
+ *   --bim-ui_accent-base   → hover fill (TOE's default is white,
+ *                              which clashes with our light theme;
+ *                              set to a translucent overlay so the
+ *                              hover reads as a soft brightening
+ *                              instead of a stark color flip)
+ *
+ * Mapping chosen for visual axis distinction while staying on-
+ * palette:
+ *   X → Salfa primary  (--ff-blue-active, #A32428 — Salfa red)
+ *   Y → Arq tag accent (--ff-tag-arq-text, green)
+ *   Z → Section accent (--ff-tag-section-text, amber)
+ *
+ * CSS custom properties pierce shadow DOM by default, so setting
+ * them on the cube element (or any ancestor) is enough — no need
+ * to reach inside the LitElement. */
+.viewCubeContainer bim-view-cube {
+  --bim-view-cube_x--bgc: var(--ff-blue-active);
+  --bim-view-cube_y--bgc: var(--ff-tag-arq-text);
+  --bim-view-cube_z--bgc: var(--ff-tag-section-text);
+  --bim-view-cube--c: #ffffff;
+  --bim-ui_accent-base: rgba(255, 255, 255, 0.35);
 }
 
 /* Error overlay — visible only when the viewer fails to initialize. */

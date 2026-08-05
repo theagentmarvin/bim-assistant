@@ -108,6 +108,13 @@
  * between the cube's centerline and its edges, plus the cube's
  * own 10px gutter from the viewer right edge.
  *
+ * Boss 2026-08-05 19:49 — right offset halved from 56px to 28px.
+ * The column no longer sits under the cube's centerline; it now
+ * floats 18px to the left of the cube's right edge, hugging the
+ * top-right corner of the viewer. Keeps the toolbar visually
+ * anchored to the cube while leaving more breathing room on its
+ * left for future wider controls.
+ *
  * Future-proof: more viewer-related tools can be added as
  * additional `.toolbarBtn` siblings in Viewer3D.tsx without
  * restructuring this CSS. The container width stays fixed at 36px
@@ -117,7 +124,7 @@
 .viewerToolsToolbar {
   position: absolute;
   top: 146px;
-  right: 56px;
+  right: 28px;
   width: 36px;
   z-index: 12;
   display: flex;
@@ -198,9 +205,18 @@
  * them on the cube element (or any ancestor) is enough — no need
  * to reach inside the LitElement. */
 .viewCubeContainer bim-view-cube {
-  --bim-view-cube_x--bgc: var(--ff-blue-active);
-  --bim-view-cube_y--bgc: var(--ff-tag-arq-text);
-  --bim-view-cube_z--bgc: var(--ff-tag-section-text);
+  /* Boss 2026-08-05 19:50 — softened palette. Saturation lowered
+   * across all three axes and lightness aligned to ~60% so the
+   * faces read as cohesive rather than three primaries fighting
+   * for attention. Green (was --ff-tag-arq-text, #15803d) is
+   * replaced with a cool neutral gray so the axes land as
+   * warm/warm-with-a-cool-anchor (red / gray / amber) instead of
+   * the previous red / green / amber triad — the green was too
+   * primary and made the cube feel like a traffic light. White
+   * face text and translucent-white hover preserved. */
+  --bim-view-cube_x--bgc: #c47373;
+  --bim-view-cube_y--bgc: #9ca3af;
+  --bim-view-cube_z--bgc: #d4a373;
   --bim-view-cube--c: #ffffff;
   --bim-ui_accent-base: rgba(255, 255, 255, 0.35);
 }

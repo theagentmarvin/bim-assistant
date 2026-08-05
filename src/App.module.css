@@ -16,7 +16,14 @@
 
 .shell {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  /* Boss 2026-08-05 09:50 — `minmax(0, 1fr)` instead of bare `1fr`.
+   * The implicit `minmax(auto, 1fr)` lets the body row GROW to fit
+   * content; combined with `.shell { overflow: hidden }` (Boss 09:35)
+   * the bottom got silently clipped — the cuantificación drawer
+   * handle was below the fold with no way to scroll to it. min:0
+   * caps the row at the 1fr allocation so internal panels handle
+   * their own overflow. */
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: 100vh;
   overflow: hidden; /* Boss 2026-08-05 09:35 — defensive. Even if a
                       descendant overflows (long chat bubble, agent
@@ -87,12 +94,19 @@
   min-height: 0;
   height: 100%;
   background: var(--ff-bg-app);
+  /* Boss 2026-08-05 09:50 — defensive. Even with `min-height: 0`,
+   * a flex column whose content overflows can still push the row
+   * over the 1fr cap. Belt-and-braces with the grid fix above. */
+  overflow: hidden;
 }
 
 .left {
   flex: 0 0 320px;
   min-width: 280px;
   max-width: 340px;
+  min-height: 0; /* Boss 2026-08-05 09:50 — allow the column to shrink
+                    to fit the body row when content would otherwise
+                    push it over the 1fr cap. */
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--ff-border);
@@ -101,6 +115,7 @@
 .specColumn {
   flex: 0 0 auto;
   min-width: 0;
+  min-height: 0; /* Boss 2026-08-05 09:50 — same reason as .left. */
   display: flex;
   flex-direction: column;
   background: var(--ff-bg-app);
@@ -141,7 +156,15 @@
 .viewerColumn {
   flex: 1 1 auto;
   min-width: 0;
+  /* Boss 2026-08-05 09:50 — the drawer is at the bottom of this
+   * column. Without min-height: 0 the column kept its content's
+   * natural height (ViewerPane height: 100% + 40px drawer), which
+   * pushed the drawer handle off-screen under overflow: hidden.
+   * min-height: 0 lets the ViewerPane shrink so the drawer is
+   * always reachable at the bottom. */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--ff-bg-canvas);
+  overflow: hidden;
 }

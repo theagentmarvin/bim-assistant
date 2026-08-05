@@ -86,13 +86,18 @@ type FragmentsModelLike = {
   getLocalIds: () => Promise<number[]>;
   getItemsData: (ids: number[], config?: unknown) => Promise<Array<Record<string, unknown>>>;
   getGuidsByLocalIds?: (ids: number[]) => Promise<Array<string | null>>;
-  // Combined bounding box of the given localIds in the model's local
-  // space. Declared optional because not every TOE release has it on
-  // the same surface; callers fall back to model.getFullBBox() when
-  // missing. (OBC 3.4.8's @thatopen/fragments 3.4.7 declares this as
-  // `getBBoxes(items: number[]): THREE.Box3` — synchronous, returns the
-  // union box of the listed items in the model's local space.)
-  getBBoxes?: (items: number[]) => THREE.Box3;
+  // Merged bounding box of the given localIds, in WORLD space (the
+  // manager applies model.object.matrixWorld before returning).
+  // Declared optional because not every TOE release has it on the
+  // same surface; callers fall back to model.getFullBBox() when
+  // missing. (OBC 3.4.8's @thatopen/fragments 3.4.7:
+  //   - `getMergedBox(localIds): Promise<THREE.Box3>` — the one to
+  //     use for zoom-to-row: returns ONE merged Box3 in world coords.
+  //   - `getBoxes(localIds): Promise<THREE.Box3[]>` — returns the
+  //     INDIVIDUAL boxes per item, NOT a merged box. Wrong for fit.
+  //   - `getBBoxes` does not exist on the runtime model at all
+  //     (it's a `VirtualFragmentsModel` method, not `_FragmentsModel`).)
+  getMergedBox?: (items: number[]) => Promise<THREE.Box3>;
 };
 
 export interface ElementClickData { ifcClass: string; name: string; expressID: number; modelId: string; }
@@ -835,9 +840,9 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
       if (matching.size > 0 && matching.size < total) {
         try {
           const model = fragsR.current?.list.get(MODEL_ID) as unknown as
-            | (FragmentsModelLike & { getBBoxes?: (items: number[]) => THREE.Box3 | Promise<THREE.Box3> })
+            | (FragmentsModelLike & { getMergedBox?: (items: number[]) => Promise<THREE.Box3> })
             | undefined;
-          const boxOrPromise = model?.getBBoxes?.([...matching]);
+          const boxOrPromise = model?.getMergedBox?.([...matching]);
           // fitToBox lives on the yomotsu/camera-controls instance
           // wrapped by TOE — not on the TOE-typed abstract surface in
           // 3.4.8, hence the cast. The boolean argument enables the
@@ -859,6 +864,21 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
             // to a manual `setLookAt` orbit with a distance derived
             // from the box size. `setLookAt` is the yomotsu primitive
             // and is always present on the controls.
+            //
+            // v1.1 (Boss 2026-08-05 15:30): the model returned by
+            // `frags.load()` is `_FragmentsModel`. The bounding-box
+            // method choices are:
+            //   - `getBBoxes(...)` — does NOT exist on the runtime
+            //     model (it's a `VirtualFragmentsModel` method only).
+            //     The original code's `getBBoxes` call silently
+            //     returned `undefined`, skipping the auto-fit entirely.
+            //   - `getBoxes(localIds)` — exists, returns
+            //     `Promise<THREE.Box3[]>`, an ARRAY of per-item boxes
+            //     (not the merged union). Doesn't fit `box.getCenter`.
+            //   - `getMergedBox(localIds)` — exists, returns
+            //     `Promise<THREE.Box3>` (the merged union, already in
+            //     world space via `model.object.matrixWorld`). This
+            //     is what zoom-to-row needs.
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);

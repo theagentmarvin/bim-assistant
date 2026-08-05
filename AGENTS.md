@@ -81,6 +81,7 @@ Vite is currently running on `http://127.0.0.1:5173/` (background process — se
 | Quantification tab + 429 quota fix + row-click highlight + group-by-name | `a2cf66a` | 3 tools + tabbed right pane |
 | require clase_ifc when user names an element type | `8bc4995` | Prompt rule + tool safeguard |
 | Row width + ID strip + clickable rows + dynamic columns | `1cd91d4` | :NNNN stripped, 220px first column, × button, add-column dropdown |
+| Zoom-to-row on cuantificación click (camera frames matching set) | `TBD` | Live dev verified 2026-08-05: row click → camera moves to element. See §5i |
 
 **3-tool surface** (`src/agent/tools.ts`):
 1. `consultar_base_de_conocimiento(pregunta, fuente?, tabla?)` — RAG; can return `tabla` for the Quantificación tab
@@ -150,6 +151,17 @@ No nested-property queries. "muros arriba de 3m" → empty result. Documented as
 - **Critic + Architect reasoning work** → model `deepseek/deepseek-v4-pro`.
 - **Sub-agents leave work UNCOMMITTED.** Architect reviews the diff + runs gates + commits.
 - **Two-layer completion signal:** overwrite `.last-task.md` + best-effort `sessions_send` to Architect's stable key.
+
+### 5i. FragmentsModel bounding-box API: `getMergedBox`, NOT `getBBoxes` (Boss 2026-08-05 15:38)
+
+The runtime model returned by `frags.load()` is `_FragmentsModel`. Its bounding-box surface is:
+
+- `model.getMergedBox(localIds): Promise<THREE.Box3>` — the **merged** union box, already in **world space** (the manager applies `model.object.matrixWorld` before returning). **This is what zoom-to-row needs.**
+- `model.getBoxes(localIds): Promise<THREE.Box3[]>` — an **array** of per-item boxes (NOT merged). Don't use for fit.
+- `model.getBBoxes(...)` — **does not exist** on the runtime model. It's a `VirtualFragmentsModel` method. Calling it returns `undefined` and the auto-fit path silently no-ops (highlight fires, camera stays still).
+- `model.getFullBBox(): Promise<THREE.Box3>` — the full model box in world space. Use for the "Reset view" handler.
+
+Lesson: don't trust the OBC surface names without `grep`-ing the actual `@thatopen/fragments` `dist/index.cjs` — the typed view is happy to lie about a method that compiles but throws / returns undefined at runtime.
 
 ## 6. Specs (read in this order if you're picking up work)
 

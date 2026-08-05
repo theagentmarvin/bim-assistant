@@ -1,0 +1,99 @@
+{
+  "rules": [
+    {
+      "id": "intent-greeting-short-circuit",
+      "hook": "intent-classifier",
+      "priority": 100,
+      "description": "Short-circuit greetings and thanks with canned responses to save API quota.",
+      "rule": {
+        "patterns": [
+          {
+            "regex": "^(hola|buenos d[ií]as|buenas tardes|buenas)\\b",
+            "intent": "greeting",
+            "response": "¡Hola! Soy Salfa BIM Agent 01. Pregúntame sobre el modelo BIM o las especificaciones técnicas del proyecto."
+          },
+          {
+            "regex": "^(gracias|muchas gracias|thanks)\\b",
+            "intent": "thanks",
+            "response": "¡De nada! Estoy aquí para ayudarte con el modelo BIM y la especificación."
+          },
+          {
+            "regex": "^(qu[eé] puedes hacer|qu[eé] sabes hacer|ayuda|help|c[oó]mo funcionas)\\b",
+            "intent": "capabilities",
+            "response": "Puedo consultar el modelo BIM (propiedades, cantidades, listados), resaltar y aislar elementos en el visor 3D, abrir secciones del PDF de especificaciones, y generar tablas de cuantificación en la pestaña Cuantificación."
+          },
+          {
+            "regex": "^(adi[oó]s|hasta luego|chao|bye)\\b",
+            "intent": "goodbye",
+            "response": "¡Hasta luego! Cuando quieras volver a consultar el modelo, escríbeme."
+          }
+        ]
+      }
+    },
+    {
+      "id": "pre-prompt-cuantificacion-must-be-table",
+      "hook": "pre-prompt-augmentation",
+      "priority": 90,
+      "description": "When the user asks for cuantificación, the LLM MUST return a structured table even if the columns are uncertain. Reinforced by JARVIS_SYSTEM_PROMPT but worth a hint at run time so it's the first thing the LLM sees this turn.",
+      "rule": {
+        "trigger_pattern": "cuantific[a-záéíóú]+|cuantifica|cuantificar",
+        "augmentation_text": "[Regla runtime — cuantificación detectada] Esta pregunta contiene una solicitud de cuantificación. SIEMPRE devuelve una tabla estructurada (campo `tabla` de consultar_base_de_conocimiento). Si no sabes qué columnas usar, devuelve al menos ['nombre']. No respondas solo con prosa.",
+        "cooldown_turns": 1
+      }
+    },
+    {
+      "id": "pre-prompt-class-filter-required",
+      "hook": "pre-prompt-augmentation",
+      "priority": 88,
+      "description": "Detect when the user mentions a specific element type without an obvious class. The LLM needs to set clase_ifc or the tool refuses (Boss #14905).",
+      "rule": {
+        "trigger_pattern": "\\b(ventanas?|puertas?|muros?|losas?|cubiertas?|tuberías?|mobiliario)\\b",
+        "augmentation_text": "[Regla runtime — tipo de elemento detectado] Incluye OBLIGATORIAMENTE `clase_ifc` en el campo `tabla` de consultar_base_de_conocimiento. Mapeo: ventanas→IfcWindow, puertas→IfcDoor, muros→IfcWall, losas→IfcSlab, cubiertas→IfcCovering, tuberías→IfcPipeSegment, mobiliario→IfcFurniture. Sin este filtro la tabla devuelve undefined."
+      }
+    },
+    {
+      "id": "post-tool-warn-empty-highlight",
+      "hook": "post-tool-call-validator",
+      "priority": 80,
+      "description": "If resaltar_elementos finds 0 matching elements, surface a warning so the LLM tells the user instead of silently proceeding.",
+      "rule": {
+        "tool_name": "resaltar_elementos",
+        "condition": { "result.matching": 0 },
+        "inject_warning": "[Hook — resaltado vacío] No se encontraron elementos que coincidan con el criterio. Sugiere al usuario revisar la clase IFC o el nombre del elemento en la columna Nombre. No muestres el visor vacío en silencio."
+      }
+    },
+    {
+      "id": "post-tool-warn-empty-table",
+      "hook": "post-tool-call-validator",
+      "priority": 78,
+      "description": "If consultar_base_de_conocimiento returns no tabla (presumably because the LLM forgot clase_ifc), inject a hint so the next turn reddens the agent.",
+      "rule": {
+        "tool_name": "consultar_base_de_conocimiento",
+        "condition": { "result.tabla": null },
+        "inject_warning": "[Hook — tabla vacía] El tool no devolvió tabla. Probablemente falta clase_ifc o agrupar_por, o columnas resolubles. Considera pedir al usuario que especifique qué tipo de elemento busca."
+      }
+    },
+    {
+      "id": "hallucination-guard-numeric-totales",
+      "hook": "hallucination-guard",
+      "priority": 95,
+      "description": "Cross-check numeric values in the final prose against tool-reported totales. If the agent reports a number that doesn't match, append a warning to the response.",
+      "rule": {
+        "check": "numeric_mismatch",
+        "tolerance_percent": 1.0,
+        "warning_text": "⚠ El valor numérico reportado no coincide con el cálculo exacto del tool. Verifica la cifra antes de publicar la respuesta."
+      }
+    },
+    {
+      "id": "formatting-append-stats-footer",
+      "hook": "formatting-template",
+      "priority": 5,
+      "description": "Append a small project-stats footer to every agent response (skipping intent-classifier short-circuits). Plain text only — no markdown asterisks, since the response already carries styling markup that conflicts with markdown italics.",
+      "rule": {
+        "footer_template": "\n\n— Salfa BIM Agent 01 · SZA_BDE3_ARQ_C1 · IFC 2x3 · 291 elementos",
+        "max_length": 120,
+        "skip_when_short_circuit": true
+      }
+    }
+  ]
+}

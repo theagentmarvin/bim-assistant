@@ -94,13 +94,30 @@ export default function CuantificacionDrawer({
 
   const startDrag = (e: React.MouseEvent) => {
     e.preventDefault();
+
+    // Boss 2026-08-05 10:49 — disable resize at peek. There is
+    // nothing to resize when the drawer is at its minimum height
+    // (40px), and attaching document mousemove/mouseup listeners
+    // there lets any touchpad jitter on the mousedown (peak |Δy| >
+    // 5px) get classified as a drag — which falls into the no-op
+    // else branch in onUp and silently swallows the user's
+    // click-to-open. That is why Boss couldn't reopen the drawer
+    // after closing it. Treat the gesture as a click-to-expand
+    // immediately; drag is only meaningful when the drawer is open.
+    if (state === "peek") {
+      onStateChange("expanded");
+      return;
+    }
+
     const currentHeight = heightForState(state);
+    // After the peek early-return above, state is narrowed to
+    // "expanded" | "full" — wasNonPeek is therefore always true.
     dragStateRef.current = {
       startHeight: currentHeight,
       startY: e.clientY,
       currentHeight,
       pending: false,
-      wasNonPeek: state !== "peek",
+      wasNonPeek: true,
       peakDeltaY: 0,
     };
     setDragHeight(currentHeight);
@@ -142,21 +159,21 @@ export default function CuantificacionDrawer({
         // gesture stayed within 5px of the down position, treat it
         // as a click rather than a drag.
         //
-        // Boss 2026-08-05 10:05 — handle is a true TOGGLE now so
-        // the cuantificación drawer mirrors the spec column's
-        // click-to-open / click-to-close pattern. Click at peek →
-        // expanded. Click at expanded / full → peek. Drag (movement
-        // ≥ 5px) still snaps to the nearest state via the
-        // height-driven branch below.
+        // Boss 2026-08-05 10:05 — handle is a true TOGGLE so the
+        // cuantificación drawer mirrors the spec column's
+        // click-to-open / click-to-close pattern. Click at expanded /
+        // full → peek. Drag (movement ≥ 5px) still snaps to the
+        // nearest state via the height-driven branch below.
+        //
+        // Boss 2026-08-05 10:49 — peek → expanded is handled by the
+        // early return at the top of startDrag, so by the time we
+        // reach onUp state is already narrowed to
+        // "expanded" | "full". isClickToExpand is dead code here.
         const isClick = r.peakDeltaY < 5;
-        const isClickToExpand =
-          isClick && state === "peek" && !r.wasNonPeek;
         const isClickToCollapse =
           isClick && (state === "expanded" || state === "full");
 
-        if (isClickToExpand) {
-          onStateChange("expanded");
-        } else if (isClickToCollapse) {
+        if (isClickToCollapse) {
           onStateChange("peek");
         } else {
           if (r.wasNonPeek && snapped === "peek") {

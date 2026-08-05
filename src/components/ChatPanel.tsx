@@ -35,9 +35,32 @@ interface Props {
   busy: boolean;
   onSend: (text: string) => void;
   onReset: () => void;
+  // Boss 2026-08-05 R3 — contextual suggested prompts. When the
+  // chat is empty, the parent (App) passes a dynamic list sourced
+  // from getContextualPrompts + the user-prompts registry. Empty
+  // array (default) falls back to the static examples that shipped
+  // before R3. Click flow unchanged — both forms are displayed, not
+  // auto-submitted.
+  contextualPrompts?: string[];
 }
 
-export default function ChatPanel({ messages, busy, onSend, onReset }: Props) {
+// Fallback suggested prompts shown when App hasn't supplied any.
+// Kept verbatim so existing users see zero behavior change until the
+// parent explicitly opts in via the contextualPrompts prop.
+const DEFAULT_EXAMPLES: readonly string[] = [
+  "¿Cuántos muros hay en el modelo?",
+  "muéstrame los muros exteriores",
+  "abre la sección sobre siding",
+  "¿qué dice la especificación sobre el siding?",
+];
+
+export default function ChatPanel({
+  messages,
+  busy,
+  onSend,
+  onReset,
+  contextualPrompts = [],
+}: Props) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -87,17 +110,20 @@ export default function ChatPanel({ messages, busy, onSend, onReset }: Props) {
         </button>
       </div>
       <div className={styles.list} ref={listRef}>
-        {messages.length === 0 && (
-          <div className={styles.empty}>
-            <div className={styles.emptyTitle}>Pregúntale a Salfa BIM Agent 01</div>
-            <ul className={styles.examples}>
-              <li>¿Cuántos muros hay en el modelo?</li>
-              <li>muéstrame los muros exteriores</li>
-              <li>abre la sección sobre siding</li>
-              <li>¿qué dice la especificación sobre el siding?</li>
-            </ul>
-          </div>
-        )}
+        {(() => {
+          if (messages.length > 0) return null;
+          const list = contextualPrompts.length > 0 ? contextualPrompts : DEFAULT_EXAMPLES;
+          return (
+            <div className={styles.empty}>
+              <div className={styles.emptyTitle}>Pregúntale a Salfa BIM Agent 01</div>
+              <ul className={styles.examples}>
+                {list.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
         {messages.map((m) => (
           <MessageRow key={m.id} message={m} />
         ))}

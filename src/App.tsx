@@ -26,6 +26,10 @@ import CuantificacionDrawer, { type DrawerState } from "./components/Cuantificac
 import PropertiesOverlay from "./components/PropertiesOverlay";
 import SpecRail from "./components/SpecRail";
 import { loadMappings } from "./data/mappings";
+import {
+  getContextualPrompts,
+  loadPromptRegistry,
+} from "./data/prompts";
 import type { ElementClickData, ElementProperties } from "./viewer/Viewer3D";
 import { runAgentLoop } from "./agent/loop";
 import { buildTableContextPreamble } from "./agent/tools";
@@ -466,6 +470,24 @@ export default function App() {
     userHasCollapsedThisTurnRef.current = false;
   }, []);
 
+  // Boss 2026-08-05 R3 — contextual suggested prompts. Registry is
+  // loaded once at module-init (Vite bundles the JSON statically,
+  // HMR replays the loader on save). The actual prompt list
+  // rebuilds whenever the table or selected class changes. Viewer
+  // match count isn't surfaced yet → null (preamble and prompt list
+  // both degrade gracefully without it).
+  const promptRegistry = useMemo(() => loadPromptRegistry(), []);
+  const contextualPrompts = useMemo(
+    () =>
+      getContextualPrompts(
+        promptRegistry,
+        latestTable,
+        agentIfcClass,
+        null,
+      ),
+    [promptRegistry, latestTable, agentIfcClass],
+  );
+
   // ----- 3D element click -----
   const handleElementClick = useCallback((data: ElementClickData) => {
     if (!data.ifcClass) {
@@ -587,6 +609,7 @@ export default function App() {
             busy={busy}
             onSend={handleSend}
             onReset={handleReset}
+            contextualPrompts={contextualPrompts}
           />
         </aside>
         <section

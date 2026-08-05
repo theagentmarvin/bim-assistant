@@ -77,6 +77,14 @@ export default function CuantificacionDrawer({
     currentHeight: number;
     pending: boolean;
     wasNonPeek: boolean;
+    // Boss 2026-08-05 09:58 — tracks the peak |Y| delta reached
+    // during the gesture. We need this in onUp to distinguish a
+    // click (no significant movement) from a real drag, because
+    // Chrome (≥90) swallows the synthetic `click` event when the
+    // mousedown handler calls preventDefault on a div with
+    // touch-action: none. Threshold matches the same 5px idiom we
+    // use in Viewer3D's pointer split.
+    peakDeltaY: number;
   } | null>(null);
 
   const drawerHeight = useMemo(() => {
@@ -93,6 +101,7 @@ export default function CuantificacionDrawer({
       currentHeight,
       pending: false,
       wasNonPeek: state !== "peek",
+      peakDeltaY: 0,
     };
     setDragHeight(currentHeight);
 
@@ -109,6 +118,10 @@ export default function CuantificacionDrawer({
           PEEK_HEIGHT,
           Math.min(max, dragStateRef.current.startHeight + delta),
         );
+        const ad = Math.abs(delta);
+        if (ad > dragStateRef.current.peakDeltaY) {
+          dragStateRef.current.peakDeltaY = ad;
+        }
         setDragHeight(dragStateRef.current.currentHeight);
         dragStateRef.current.pending = false;
       });
@@ -121,10 +134,24 @@ export default function CuantificacionDrawer({
       if (r) {
         const finalHeight = r.currentHeight;
         const snapped = snapToState(finalHeight, viewportHeight);
-        if (r.wasNonPeek && snapped === "peek") {
-          onDragCollapseToPeek?.();
+
+        // Boss 2026-08-05 09:58 — Chrome swallows the synthetic
+        // click event when the mousedown handler calls
+        // preventDefault on a div with touch-action: none. We can't
+        // rely on onClick firing, so detect a click here: if the
+        // gesture stayed within 5px of the down position AND we
+        // were at peek, treat it as a click-to-expand.
+        const isClickToExpand =
+          state === "peek" && !r.wasNonPeek && r.peakDeltaY < 5;
+
+        if (isClickToExpand) {
+          onStateChange("expanded");
+        } else {
+          if (r.wasNonPeek && snapped === "peek") {
+            onDragCollapseToPeek?.();
+          }
+          onStateChange(snapped);
         }
-        onStateChange(snapped);
         setDragHeight(null);
       }
       dragStateRef.current = null;
@@ -165,10 +192,13 @@ export default function CuantificacionDrawer({
     return `${total} fila${total === 1 ? "" : "s"}`;
   }, [data]);
 
-  // Clicking the handle while at peek expands to expanded. The drag
-  // handler also fires because mousedown→mouseup with no movement
-  // resolves to snap-to-current-state (no change). The click event
-  // fires after mouseup, so the two compose cleanly.
+  // Boss 2026-08-05 09:58 — onHandleClick is now a defensive
+  // fallback only. The real click-to-expand path lives in onUp's
+  // `isClickToExpand` branch because Chrome swallows the synthetic
+  // click event when the mousedown handler calls preventDefault on
+  // a div with touch-action: none. If the click event DOES fire in
+  // some browser, this still expands the drawer — onStateChange is
+  // idempotent (calling it with the current state is a no-op).
   const onHandleClick = () => {
     if (state === "peek") {
       onStateChange("expanded");

@@ -122,17 +122,23 @@ export interface TablaSpec {
   titulo?: string;
   /**
    * Boss 2026-08-03 (calcular_cantidades) — when set, the table
-   * aggregates the named column (suma / promedio / min / max), adds a
-   * TOTAL row at the bottom of the Cuantificación tab, and exposes
-   * the aggregate via the table's `totales` field for the agent's
-   * prose response. The column must be one of the labels in `columnas`.
-   * Resolution order is the same as for `columnas` (Spanish aliases
-   * first, then class-specific Qto_ keys via availableColumns).
+   * aggregates the named columns (suma / promedio / min / max), adds a
+   * TOTAL row per operation at the bottom of the Cuantificación tab
+   * and exposes the aggregates via the table's `totales` field for
+   * the agent's prose response. Each column must be one of the
+   * labels in `columnas`. Resolution order is the same as for
+   * `columnas` (Spanish aliases first, then class-specific Qto_
+   * keys via availableColumns).
+   *
+   * 2026-08-05 (fix #B1.b) — promoted from a single object to an
+   * array so a single tool call can emit totals for multiple
+   * columns (e.g. sum Area + sum Largo + sum Alto). The LLM emits
+   * the array; the tool loop produces one TOTAL row per element.
    */
-  calcular?: {
+  calcular?: Array<{
     operacion: OperacionCalculo;
     columna: string;
-  };
+  }>;
   /**
    * Boss 2026-08-05 (R2: incremental refinement) — when set,
    * operates on the cached rows from the previous buildTabla call
@@ -517,6 +523,62 @@ function readNumericCell(v: string | number | boolean | undefined): number | nul
   return null;
 }
 
+/**
+ * Boss 2026-08-05 (fix #B1.b) — compute one TOTAL row per operation
+ * in the spec, push them onto `filas` in place, and return the
+ * aggregate TotalesSpec array. Extracted from buildTabla +
+ * refinarTabla after the schema was promoted from a single object
+ * to an array (a single tool call can now emit totals for multiple
+ * columns).
+ *
+ * Skips a TOTAL row when the column has zero numeric values in the
+ * data rows (which would otherwise produce TOTAL = 0.000 with no
+ * semantic meaning). Also skips rows already marked `_tipo: "total"`
+ * so re-running on a refined cache never sums its own output.
+ *
+ * Returns an empty array when `specCalcular` is undefined or empty.
+ */
+function computeCalcularTotales(
+  specCalcular: TablaSpec["calcular"],
+  filas: Array<Record<string, string | number | boolean>>,
+  validColumns: string[],
+  availableColumns: string[],
+): TotalesSpec[] {
+  const totales: TotalesSpec[] = [];
+  if (!specCalcular || specCalcular.length === 0) return totales;
+  for (const op of specCalcular) {
+    const targetCol = op.columna;
+    const resolvedKey =
+      resolveColumnKey(targetCol, availableColumns) ?? undefined;
+    const values: number[] = [];
+    for (const row of filas) {
+      if (row._tipo === "total") continue;
+      const v = readNumericCell(row[targetCol]);
+      if (v !== null) values.push(v);
+    }
+    if (values.length === 0) continue;
+    const valor = aggregateValues(values, op.operacion);
+    const unidad = resolvedKey ? getUnitForProperty(resolvedKey) : undefined;
+    const formatted = unidad
+      ? `${valor.toFixed(3)} ${unidad}`
+      : valor.toFixed(3);
+    const totalRow: Record<string, string | number | boolean> = {
+      _tipo: "total",
+    };
+    for (const col of validColumns) {
+      totalRow[col] = col === targetCol ? formatted : "—";
+    }
+    filas.push(totalRow);
+    totales.push({
+      operacion: op.operacion,
+      columna: targetCol,
+      valor,
+      unidad,
+    });
+  }
+  return totales;
+}
+
 function defaultTitulo(spec: TablaSpec, count: number): string {
   if (spec.agrupar_por && spec.agrupar_por.length > 0) {
     return `Cantidad por ${spec.agrupar_por.join(" / ")} (${count})`;
@@ -710,38 +772,17 @@ function refinarTabla(
   );
 
   // 5. Re-run `calcular` on the refined rows if the new spec asks.
-  let totales: TotalesSpec | undefined;
-  if (spec.calcular) {
-    const targetCol = spec.calcular.columna;
-    const resolvedKey =
-      resolveColumnKey(targetCol, availableColumns) ?? undefined;
-    const values: number[] = [];
-    for (const row of filas) {
-      const v = readNumericCell(row[targetCol]);
-      if (v !== null) values.push(v);
-    }
-    if (values.length > 0) {
-      const valor = aggregateValues(values, spec.calcular.operacion);
-      const unidad = resolvedKey ? getUnitForProperty(resolvedKey) : undefined;
-      const formatted = unidad
-        ? `${valor.toFixed(3)} ${unidad}`
-        : valor.toFixed(3);
-      const totalRow: Record<string, string | number | boolean> = {
-        _tipo: "total",
-      };
-      for (const col of validColumns) {
-        totalRow[col] = col === targetCol ? formatted : "—";
-      }
-      filas.push(totalRow);
-      express_ids.push([]);
-      totales = {
-        operacion: spec.calcular.operacion,
-        columna: targetCol,
-        valor,
-        unidad,
-      };
-    }
-  }
+  // Boss 2026-08-05 (fix #B1.b) — `calcular` is now an array, so a
+  // single refinement can re-emit totals for multiple columns
+  // (e.g. sum Area + sum Largo + sum Alto after a material filter).
+  // Helper pushes one TOTAL row per operation.
+  const totales = computeCalcularTotales(
+    spec.calcular,
+    filas,
+    validColumns,
+    availableColumns,
+  );
+  for (let i = 0; i < totales.length; i++) express_ids.push([]);
 
   return {
     titulo: spec.titulo ?? `Refinado (${filas.length})`,
@@ -862,40 +903,23 @@ export function buildTabla(
     typeof r.express_id === "number" ? [r.express_id] : [],
   );
   const filas = rows.map((r) => projectRowFull(r, validColumns, availableColumns));
-  // Boss 2026-08-03 (calcular_cantidades) — compute the aggregate if
-  // the spec asks for one. The TOTAL row goes at the end of `filas`
-  // with `_tipo: "total"`; the panel renders it last with distinct
-  // styling and bypasses filter/sort. The same value is exposed via
-  // `totales` so the agent can phrase the prose response.
-  let totales: TotalesSpec | undefined;
-  if (spec.calcular) {
-    const targetCol = spec.calcular.columna;
-    // Resolve the column to its actual property key so we can
-    // infer the unit (m² / m³ / m) from the Qto_ segment.
-    const resolvedKey = resolveColumnKey(targetCol, availableColumns) ?? undefined;
-    const values: number[] = [];
-    for (const row of filas) {
-      const v = readNumericCell(row[targetCol]);
-      if (v !== null) values.push(v);
-    }
-    if (values.length > 0) {
-      const valor = aggregateValues(values, spec.calcular.operacion);
-      const unidad = resolvedKey ? getUnitForProperty(resolvedKey) : undefined;
-      const formatted = unidad ? `${valor.toFixed(3)} ${unidad}` : valor.toFixed(3);
-      const totalRow: Record<string, string | number | boolean> = { _tipo: "total" };
-      for (const col of validColumns) {
-        totalRow[col] = col === targetCol ? formatted : "—";
-      }
-      filas.push(totalRow);
-      filas_express_ids.push([]);
-      totales = {
-        operacion: spec.calcular.operacion,
-        columna: targetCol,
-        valor,
-        unidad,
-      };
-    }
-  }
+  // Boss 2026-08-03 (calcular_cantidades) — compute the aggregates if
+  // the spec asks for them. One TOTAL row per operation goes at the
+  // end of `filas` with `_tipo: "total"`; the panel renders them last
+  // with distinct styling and bypasses filter/sort. The same values
+  // are exposed via `totales` so the agent can phrase the prose response.
+  //
+  // 2026-08-05 (fix #B1.b) — `calcular` is now an array, so a single
+  // buildTabla call can emit totals for multiple columns. The helper
+  // produces one TOTAL row per operation and pushes the matching
+  // empty express_ids entries below.
+  const totales: TotalesSpec[] = computeCalcularTotales(
+    spec.calcular,
+    filas,
+    validColumns,
+    availableColumns,
+  );
+  for (let i = 0; i < totales.length; i++) filas_express_ids.push([]);
   // Boss 2026-08-05 (R2) — populate the refinement cache so the next
   // call with `refinar` can operate on this row set without
   // re-querying bim_elements.json. The cache stores raw elements
@@ -1049,21 +1073,25 @@ export function buildTableContextPreamble(
           `Propiedades disponibles (puedes agregarlas como columna): ${preview.join(", ")}${suffix}`,
         );
       }
-      if (tabla.totales) {
-        const t = tabla.totales;
-        const formatted = t.unidad
-          ? `${t.valor.toFixed(3)} ${t.unidad}`
-          : t.valor.toFixed(3);
+      if (tabla.totales && tabla.totales.length > 0) {
+        // Boss 2026-08-05 (fix #B1.b) — `totales` is now an array.
+        // Emit one "Cálculo activo" line per aggregate so the LLM
+        // sees the full state on the next turn.
         const opLabel: Record<string, string> = {
           suma: "Suma",
           promedio: "Promedio",
           min: "Mínimo",
           max: "Máximo",
         };
-        const label = opLabel[t.operacion] ?? t.operacion;
-        parts.push(
-          `Cálculo activo: ${label} de '${t.columna}' = ${formatted}`,
-        );
+        for (const t of tabla.totales) {
+          const formatted = t.unidad
+            ? `${t.valor.toFixed(3)} ${t.unidad}`
+            : t.valor.toFixed(3);
+          const label = opLabel[t.operacion] ?? t.operacion;
+          parts.push(
+            `Cálculo activo: ${label} de '${t.columna}' = ${formatted}`,
+          );
+        }
       }
     }
     if (selectedIfcClass) {

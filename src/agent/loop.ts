@@ -52,7 +52,7 @@ function formatTotalesForProse(t: TotalesSpec): string {
 
 // The tool result union doesn't expose `tabla` on every variant —
 // we narrow with a typed cast after the tool-name check.
-type ConsultarResultWithTotales = { tabla?: { totales?: TotalesSpec } };
+type ConsultarResultWithTotales = { tabla?: { totales?: TotalesSpec[] } };
 
 export interface AgentCallbacks {
   onToolCallStart?: (name: string, args: Record<string, unknown>) => void;
@@ -196,10 +196,14 @@ export async function runAgentLoop(
       if (
         result.ok &&
         fc.name === "consultar_base_de_conocimiento" &&
-        (result.result as ConsultarResultWithTotales | undefined)?.tabla?.totales
+        (result.result as ConsultarResultWithTotales | undefined)?.tabla?.totales?.length
       ) {
-        const totales = (result.result as { tabla: { totales: TotalesSpec } }).tabla.totales;
-        proseGuard = formatTotalesForProse(totales);
+        // Boss 2026-08-05 (fix #B1.b) — `totales` is now an array.
+        // Each element gets its own prose guard line so the LLM
+        // reports every aggregate exactly (Area + Largo + Alto in
+        // one tool call → three guard lines in the next turn).
+        const totales = (result.result as { tabla: { totales: TotalesSpec[] } }).tabla.totales;
+        proseGuard = totales.map(formatTotalesForProse).join("\n");
       }
     }
     // Gemini v1beta (gemini-flash-latest and newer) accepts function

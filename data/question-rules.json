@@ -42,6 +42,16 @@
       }
     },
     {
+      "id": "pre-prompt-refinement-add-remove-column",
+      "hook": "pre-prompt-augmentation",
+      "priority": 88,
+      "description": "When the user asks to add or remove a column on an existing table, nudge the LLM to use refinar.agregar_columnas / refinar.quitar_columnas instead of re-emitting `columnas` (which would discard the existing columns — the bug Boss hit on 2026-08-05 saying 'agrega la columna area' and seeing the table reduce to just Area).",
+      "rule": {
+        "trigger_pattern": "/\\b(?:agrega(?:r)?|a\u00f1ade?r?|incluye|necesito\\s+ver|muestra(?:me)?\\s+tambi\u00e9n|suma\\s+(?:a\\s+la\\s+tabla|tambi\u00e9n))\\s+(?:la\\s+|las\\s+|la\\s+columna\\s+|las\\s+columnas\\s+)?[\\'\"]?\\w+|\\b(?:quita(?:r)?|remueve|remover|elimina(?:r)?|esconde(?:r)?|oculta(?:r)?|no\\s+(?:quiero\\s+ver|muestres?))\\s+(?:la\\s+|las\\s+|la\\s+columna\\s+|las\\s+columnas\\s+)?[\\'\"]?\\w+/i",
+        "augmentation_text": "[Regla runtime — Boss 2026-08-05 fix #B3] El usuario pidió agregar o quitar una columna de la tabla ACTIVA. USA `refinar.agregar_columnas: [\"X\"]` para agregar, o `refinar.quitar_columnas: [\"X\"]` para quitar. NO re-emitas `tabla.columnas` con solo la columna nueva — eso descarta las columnas existentes y el usuario pierde el resto del contexto. El refinamiento parte del cache; `columnas` solo se especifica en builds nuevos."
+      }
+    },
+    {
       "id": "pre-prompt-refinement-negation",
       "hook": "pre-prompt-augmentation",
       "priority": 89,

@@ -45,6 +45,9 @@ interface Props {
    *  the agent pushes to closed because the user collapsed
    *  manually). */
   pulseCounter: number;
+  /** Called when the user clicks the × button in the table header.
+   *  Resets the table, the row selection, and the viewer highlight. */
+  onClear?: () => void;
 }
 
 export default function CuantificacionDrawer({
@@ -55,6 +58,7 @@ export default function CuantificacionDrawer({
   onStateChange,
   onUserCollapse,
   pulseCounter,
+  onClear,
 }: Props) {
   const [viewportHeight, setViewportHeight] = useState<number>(
     typeof window !== "undefined" ? window.innerHeight : 800,
@@ -183,6 +187,7 @@ export default function CuantificacionDrawer({
             data={data}
             onRowSelect={onRowSelect}
             selectedRowIndex={selectedRowIndex}
+            onClear={onClear}
           />
         </div>
       )}

@@ -180,6 +180,20 @@ export default function App() {
     userHasCollapsedThisTurnRef.current = true;
   }, []);
 
+  // Boss 2026-08-05 14:45 — explicit "Limpiar tabla" button. The voice
+  // agent doesn't understand the request; the only reliable way to
+  // clear the table is a UI affordance. Resets the table, the row
+  // selection, the user-driven viewer highlight, and the properties
+  // overlay state. The agent-driven Hider (selectedIfcClass,
+  // agentFilter, agentMappingId) is preserved so the chat context
+  // stays intact.
+  const handleClearTable = useCallback(() => {
+    setLatestTable(null);
+    setSelectedRowIndex(null);
+    setUserSelectionFilter(null);
+    setSelectedElement(null);
+  }, []);
+
   // Auto-expand on a new latestTable. If the user collapsed during
   // the current turn, only push to closed with a badge pulse.
   useEffect(() => {
@@ -625,6 +639,7 @@ export default function App() {
             onStateChange={setDrawerState}
             onUserCollapse={handleUserCollapsed}
             pulseCounter={pulseCounter}
+            onClear={handleClearTable}
           />
         </section>
       </main>

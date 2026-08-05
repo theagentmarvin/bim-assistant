@@ -835,18 +835,53 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
       if (matching.size > 0 && matching.size < total) {
         try {
           const model = fragsR.current?.list.get(MODEL_ID) as unknown as
-            | (FragmentsModelLike & { getBBoxes?: (items: number[]) => THREE.Box3 })
+            | (FragmentsModelLike & { getBBoxes?: (items: number[]) => THREE.Box3 | Promise<THREE.Box3> })
             | undefined;
-          const box = model?.getBBoxes?.([...matching]);
+          const boxOrPromise = model?.getBBoxes?.([...matching]);
           // fitToBox lives on the yomotsu/camera-controls instance
           // wrapped by TOE — not on the TOE-typed abstract surface in
           // 3.4.8, hence the cast. The boolean argument enables the
           // smooth tween (~600ms ease-in-out by default).
-          if (box && box.isEmpty?.() === false) {
+          const applyFit = (box: THREE.Box3) => {
+            if (box.isEmpty?.()) return;
             const ctrl = worldR.current?.camera.controls as unknown as {
               fitToBox?: (b: THREE.Box3, t: boolean) => void | Promise<void>;
-            };
-            if (ctrl?.fitToBox) void ctrl.fitToBox(box, true);
+              setLookAt?: (
+                px: number, py: number, pz: number,
+                tx: number, ty: number, tz: number,
+                enableTransition?: boolean,
+              ) => void;
+            } | undefined;
+            if (!ctrl) return;
+            // v1.1 (Boss 2026-08-05 14:50): the yomotsu camera-controls
+            // `fitToBox` proved unreliable in TOE 3.4.8 — the call
+            // returns cleanly but the camera doesn't move. Fall back
+            // to a manual `setLookAt` orbit with a distance derived
+            // from the box size. `setLookAt` is the yomotsu primitive
+            // and is always present on the controls.
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const distance = Math.max(maxDim * 2.5, 1);
+            const cameraPos = center.clone().add(
+              new THREE.Vector3(distance, distance * 0.7, distance),
+            );
+            if (typeof ctrl.setLookAt === "function") {
+              ctrl.setLookAt(
+                cameraPos.x, cameraPos.y, cameraPos.z,
+                center.x, center.y, center.z,
+                true,
+              );
+            } else if (typeof ctrl.fitToBox === "function") {
+              ctrl.fitToBox(box, true);
+            }
+          };
+          if (boxOrPromise instanceof Promise) {
+            boxOrPromise.then(applyFit).catch((e) => {
+              console.warn("[V3D] fitToBox (async) failed:", e);
+            });
+          } else if (boxOrPromise) {
+            applyFit(boxOrPromise);
           }
         } catch (e) {
           console.warn("[V3D] fitToBox failed:", e);

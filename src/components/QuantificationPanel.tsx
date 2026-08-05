@@ -63,6 +63,11 @@ interface Props {
    *  Compared via express_ids (not the index) so the highlight
    *  survives sort and filter changes. */
   selectedRowIndex?: number | null;
+  /** Called when the user clicks the × button in the header.
+   *  Resets the table, the row selection, and the viewer highlight.
+   *  The agent filter on the model is preserved so the chat context
+   *  stays intact. Renders nothing when omitted. */
+  onClear?: () => void;
 }
 
 type SortDir = "asc" | "desc" | null;
@@ -72,7 +77,7 @@ interface RowMeta {
   express_ids: number[];
 }
 
-export default function QuantificationPanel({ data, onRowSelect, selectedRowIndex }: Props) {
+export default function QuantificationPanel({ data, onRowSelect, selectedRowIndex, onClear }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
@@ -318,12 +323,25 @@ export default function QuantificationPanel({ data, onRowSelect, selectedRowInde
   return (
     <div className={styles.panel}>
       <header className={styles.header}>
-        <div className={styles.title} title={data.titulo}>{data.titulo}</div>
-        <div className={styles.meta}>
-          Generado {generableAt} · fuente: {labelFuente(data.fuente)} · {totalRows}{" "}
-          fila{totalRows === 1 ? "" : "s"}
-          {filteredCount !== totalRows && ` · ${filteredCount} visibles`}
+        <div className={styles.headerInfo}>
+          <div className={styles.title} title={data.titulo}>{data.titulo}</div>
+          <div className={styles.meta}>
+            Generado {generableAt} · fuente: {labelFuente(data.fuente)} · {totalRows}{" "}
+            fila{totalRows === 1 ? "" : "s"}
+            {filteredCount !== totalRows && ` · ${filteredCount} visibles`}
+          </div>
         </div>
+        {onClear && (
+          <button
+            type="button"
+            className={styles.clearBtn}
+            onClick={onClear}
+            aria-label="Limpiar tabla"
+            title="Limpiar tabla"
+          >
+            ×
+          </button>
+        )}
       </header>
       <div className={styles.tableWrap} ref={tableWrapRef}>
         <table className={styles.table}>

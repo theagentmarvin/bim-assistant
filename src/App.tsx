@@ -28,6 +28,7 @@ import SpecRail from "./components/SpecRail";
 import { loadMappings } from "./data/mappings";
 import type { ElementClickData, ElementProperties } from "./viewer/Viewer3D";
 import { runAgentLoop } from "./agent/loop";
+import { buildTableContextPreamble } from "./agent/tools";
 import {
   indexAll,
   forceReindex,
@@ -379,6 +380,16 @@ export default function App() {
     setMessages((m) => [...m, userMsg]);
     setBusy(true);
     const append = (msg: ChatMessage) => setMessages((m) => [...m, msg]);
+    // Boss 2026-08-05 R1 — inject a table-state preamble so the agent
+    // can answer follow-up questions without rebuilding the table
+    // from scratch. Latest table + selected IFC class come from
+    // App.tsx state; viewer match-count isn't surfaced yet so we
+    // pass null (preamble degrades gracefully without it).
+    const tableContext = buildTableContextPreamble(
+      latestTable,
+      agentIfcClass,
+      null,
+    );
     try {
       const finalText = await runAgentLoop(text, toolContext, {
         onToolCallStart: (name, args) => {
@@ -415,7 +426,10 @@ export default function App() {
         onError: (message) => {
           append({ id: newMessageId(), role: "error", error: message });
         },
-      });
+      },
+        undefined, // signal — chat path doesn't pass AbortSignal today
+        tableContext ?? undefined,
+      );
       setMessages((m) => {
         const last = m[m.length - 1];
         if (last?.role === "agent" && last.text === finalText) return m;

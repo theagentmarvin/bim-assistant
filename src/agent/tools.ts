@@ -690,6 +690,71 @@ export async function toolConsultarBaseDeConocimiento(
   };
 }
 
+/**
+ * Boss 2026-08-05 (R1: table-state context) — Build a short Spanish
+ * preamble describing the currently active table and viewer state
+ * so the agent can answer follow-up questions without rebuilding
+ * from scratch. Returns null when there's no table AND no selected
+ * class, so the caller can safely skip injection.
+ *
+ * Length cap: kept well under 800 chars. available_properties is
+ * truncated to 12 entries so the user's message is never pushed
+ * out of the LLM's attention window.
+ */
+export function buildTableContextPreamble(
+    tabla: QuantificationTable | null,
+    selectedIfcClass: string | null,
+    viewerMatchCount: number | null,
+  ): string | null {
+    const parts: string[] = [];
+    if (tabla) {
+      parts.push(
+        "[Contexto de tabla activa — el usuario ya tiene ESTA tabla en pantalla]",
+      );
+      parts.push(`Título: "${tabla.titulo}" · ${tabla.filas.length} filas`);
+      parts.push(
+        `Columnas mostradas: ${tabla.columnas.join(", ") || "(ninguna)"}`,
+      );
+      if (tabla.available_properties?.length) {
+        const preview = tabla.available_properties.slice(0, 12);
+        const suffix = tabla.available_properties.length > 12 ? "…" : "";
+        parts.push(
+          `Propiedades disponibles (puedes agregarlas como columna): ${preview.join(", ")}${suffix}`,
+        );
+      }
+      if (tabla.totales) {
+        const t = tabla.totales;
+        const formatted = t.unidad
+          ? `${t.valor.toFixed(3)} ${t.unidad}`
+          : t.valor.toFixed(3);
+        const opLabel: Record<string, string> = {
+          suma: "Suma",
+          promedio: "Promedio",
+          min: "Mínimo",
+          max: "Máximo",
+        };
+        const label = opLabel[t.operacion] ?? t.operacion;
+        parts.push(
+          `Cálculo activo: ${label} de '${t.columna}' = ${formatted}`,
+        );
+      }
+    }
+    if (selectedIfcClass) {
+      const count =
+        viewerMatchCount != null
+          ? ` (${viewerMatchCount} elementos visibles)`
+          : "";
+      parts.push(
+        `Clase IFC activa en el visor: ${selectedIfcClass}${count}`,
+      );
+    }
+    if (parts.length === 0) return null;
+    parts.push(
+      "Usa este contexto para responder preguntas de seguimiento sin reconstruir la tabla desde cero. Si el usuario pide refinar, prioriza las propiedades disponibles listadas arriba.",
+    );
+    return parts.join("\n");
+  }
+
 export function toolResaltarElementos(
   args: {
     clase_ifc?: string;

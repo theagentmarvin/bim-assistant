@@ -59,13 +59,19 @@ export async function runAgentLoop(
   ctx: ToolContext,
   callbacks: AgentCallbacks = {},
   signal?: AbortSignal,
+  // Boss 2026-08-05 R1 — table-state preamble injected as a
+  // user-role part before the user's actual message. Null/undefined
+  // skips the injection (default). Built by
+  // buildTableContextPreamble() in tools.ts; carried through
+  // App.tsx → handleSend.
+  tableContext?: string,
 ): Promise<string> {
-  const contents: GeminiContent[] = [
-    {
-      role: "user",
-      parts: [{ text: userMessage }],
-    },
-  ];
+  const userParts: GeminiContent["parts"] = [];
+  if (tableContext) {
+    userParts.push({ text: tableContext });
+  }
+  userParts.push({ text: userMessage });
+  const contents: GeminiContent[] = [{ role: "user", parts: userParts }];
   let finalText = "";
   for (let turn = 0; turn < MAX_TURNS; turn += 1) {
     if (signal?.aborted) throw new Error("Cancelado por el usuario.");

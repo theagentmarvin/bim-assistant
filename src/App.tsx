@@ -23,6 +23,7 @@ import ChatPanel, {
   summarizeToolResult,
 } from "./components/ChatPanel";
 import CuantificacionDrawer, { type DrawerState } from "./components/CuantificacionDrawer";
+import PropertiesOverlay from "./components/PropertiesOverlay";
 import SpecRail from "./components/SpecRail";
 import { loadMappings } from "./data/mappings";
 import type { ElementClickData, ElementProperties } from "./viewer/Viewer3D";
@@ -124,13 +125,6 @@ export default function App() {
   const [userSelectionFilter, setUserSelectionFilter] = useState<Filter | null>(null);
   const [resetTrigger, setResetTrigger] = useState(0);
   const [selectedElement, setSelectedElement] = useState<ElementProperties | null>(null);
-  // Stage 1: the ModelPropertyPanel is removed from the grid (returns
-  // as a floating overlay in stage 2). `selectedElement` is still set
-  // by row clicks and 3D element clicks so the stage-2 hookup is
-  // straightforward. Reference the state here so the linter doesn't
-  // trip on the unused declaration; substitute with a real consumer
-  // in stage 2.
-  void selectedElement;
 
   // ----- Spec column (PdfViewer | SpecRail) -----
   // The spec column shows the PdfViewer when the drawer is at peek
@@ -600,23 +594,29 @@ export default function App() {
           )}
         </section>
         <section className={styles.viewerColumn}>
-          <ViewerPane
-            mapping={agentMapping}
-            selectedIfcClass={agentIfcClass}
-            agentFilter={agentFilter}
-            userSelectionFilter={userSelectionFilter}
-            onElementClick={handleElementClick}
-            onElementData={handleElementData}
-            resetTrigger={resetTrigger}
-            onResetViewer={() => {
-              setAgentMappingId(null);
-              setAgentIfcClass(null);
-              setAgentFilter(null);
-              setUserSelectionFilter(null);
-              setSelectedElement(null);
-              setResetTrigger((k) => k + 1);
-            }}
-          />
+          <div className={styles.viewerArea}>
+            <ViewerPane
+              mapping={agentMapping}
+              selectedIfcClass={agentIfcClass}
+              agentFilter={agentFilter}
+              userSelectionFilter={userSelectionFilter}
+              onElementClick={handleElementClick}
+              onElementData={handleElementData}
+              resetTrigger={resetTrigger}
+              onResetViewer={() => {
+                setAgentMappingId(null);
+                setAgentIfcClass(null);
+                setAgentFilter(null);
+                setUserSelectionFilter(null);
+                setSelectedElement(null);
+                setResetTrigger((k) => k + 1);
+              }}
+            />
+            <PropertiesOverlay
+              data={selectedElement}
+              onClose={() => setSelectedElement(null)}
+            />
+          </div>
           <CuantificacionDrawer
             data={latestTable}
             onRowSelect={handleRowSelect}

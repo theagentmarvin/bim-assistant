@@ -1,0 +1,73 @@
+/* PropertiesOverlay.module.css
+ *
+ * Floating panel for the ModelPropertyPanel. 72% opacity + blur so
+ * the 3D viewer stays visible behind it. Sized to the viewer pane
+ * area (above the cuantificación drawer): top: 16px, right: 16px,
+ * bottom: 16px gives the user a 16px gutter on every side.
+ *
+ * Z-index above the drawer (50) so the two panels can coexist.
+ * The drawer is below the viewer pane in the layout, so geometric
+ * overlap is impossible — the z-index is defensive, in case the
+ * drawer is ever promoted to a floating position.
+ */
+
+.overlay {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  width: 420px;
+  max-width: calc(100% - 32px);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--ff-border);
+  border-radius: var(--ff-radius-control);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  font-family: var(--ff-font-stack);
+}
+
+.close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--ff-border);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ff-text-primary);
+  z-index: 1;
+  font-family: inherit;
+  padding: 0;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.close:hover {
+  background: var(--ff-bg-hover);
+  border-color: var(--ff-text-secondary);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--ff-blue-active);
+  outline-offset: -2px;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Leave room for the absolute × button at the top-right. */
+  padding: 16px;
+  padding-right: 48px;
+}

@@ -19,8 +19,33 @@ import { geminiComplete, type GeminiContent } from "../data/llm";
 import { TOOL_SCHEMAS } from "./schema";
 import { JARVIS_SYSTEM_PROMPT } from "./prompts";
 import { runTool, type ToolContext, type ToolResult } from "./tools";
+import type { OperacionCalculo, TotalesSpec } from "../quantification/types";
 
 const MAX_TURNS = 6; // bumped 4→6 because RAG-before-filter (consultar_base_de_conocimiento → resaltar_elementos) consumes 2 turns
+
+// Boss 2026-08-05 — prose-injection guardrail for `calcular_cantidades`.
+// When the consultar_base_de_conocimiento tool returns a table with
+// `totales`, we inject the formatted total into the LLM's context
+// so the prose response reports the exact value, not a hallucinated
+// recomputation. The Spanish label matches the prose surface.
+const OP_LABEL: Record<OperacionCalculo, string> = {
+  suma: "Suma",
+  promedio: "Promedio",
+  min: "Mínimo",
+  max: "Máximo",
+};
+
+function formatTotalesForProse(t: TotalesSpec): string {
+  const label = OP_LABEL[t.operacion] ?? t.operacion;
+  const formatted = t.unidad
+    ? `${t.valor.toFixed(3)} ${t.unidad}`
+    : t.valor.toFixed(3);
+  return `[Cálculo exacto del tool — usa este valor exacto en tu prosa, NO recalcules] ${label} de '${t.columna}': ${formatted}`;
+}
+
+// The tool result union doesn't expose `tabla` on every variant —
+// we narrow with a typed cast after the tool-name check.
+type ConsultarResultWithTotales = { tabla?: { totales?: TotalesSpec } };
 
 export interface AgentCallbacks {
   onToolCallStart?: (name: string, args: Record<string, unknown>) => void;
@@ -87,6 +112,11 @@ export async function runAgentLoop(
     }
     // Execute each function call, then append function-response parts.
     const responseParts: GeminiContent["parts"] = [];
+    // Prose-injection guardrail: capture the latest totales from
+    // any consultar_base_de_conocimiento call this turn. Set on
+    // every match, so the most recent totales wins if the tool is
+    // called multiple times in a single turn.
+    let proseGuard: string | null = null;
     for (const fc of functionCalls) {
       if (signal?.aborted) throw new Error("Cancelado por el usuario.");
       callbacks.onToolCallStart?.(fc.name, fc.args);
@@ -99,6 +129,14 @@ export async function runAgentLoop(
       responseParts.push({
         functionResponse: { name: fc.name, response: payload },
       });
+      if (
+        result.ok &&
+        fc.name === "consultar_base_de_conocimiento" &&
+        (result.result as ConsultarResultWithTotales | undefined)?.tabla?.totales
+      ) {
+        const totales = (result.result as { tabla: { totales: TotalesSpec } }).tabla.totales;
+        proseGuard = formatTotalesForProse(totales);
+      }
     }
     // Gemini v1beta (gemini-flash-latest and newer) accepts function
     // responses only as `role: "user"` with parts[].functionResponse.
@@ -106,6 +144,13 @@ export async function runAgentLoop(
     // ("Role 'function' is not supported"). Verified 2026-07-30 with
     // Boss's AQ. token — the new format is required.
     contents.push({ role: "user", parts: responseParts });
+    // Inject the prose guard (if any) as a separate user message so
+    // the LLM has the exact aggregate value in scope when it writes
+    // the final answer. The same instruction survives subsequent
+    // tool-call turns in the conversation history.
+    if (proseGuard) {
+      contents.push({ role: "user", parts: [{ text: proseGuard }] });
+    }
   }
   // If we exit the loop without a final answer, force one synthesis turn
   // by asking Gemini to wrap up with the gathered evidence.

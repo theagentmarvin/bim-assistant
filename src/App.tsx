@@ -9,11 +9,20 @@
 // Stage 1 (2026-08-05): MappedSidebar integrated from bim-specs-mapper.
 // Agent-driven sidebar filtering + precise filter-expression viewer
 // highlight wired in.
+//
+// UI change (Boss 2026-08-05 19:20): AgentStatus moved from a
+// dedicated row below the header into a compact trigger inside
+// the header (HeaderStatus), opening a popover for the Reindexar
+// action. Reset View button stripped from ViewerPane and re-homed
+// as a floating button under the NavCube inside Viewer3D. The
+// ViewerPane "Sin sección seleccionada" toolbar label is gone
+// with the rest of the toolbar.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ViewerPane from "./components/ViewerPane";
 import PdfViewer from "./components/PdfViewer";
-import AgentStatus, { type AgentStatusState } from "./components/AgentStatus";
+import HeaderStatus from "./components/HeaderStatus";
+import { type AgentStatusState } from "./components/AgentStatus";
 import ChatPanel, {
   type ChatMessage,
   summarizeToolResult,
@@ -655,16 +664,16 @@ export default function App() {
         </div>
         <div className={styles.headerRight}>
           <span className={styles.metaPill}>{mappings.length} secciones</span>
+          <HeaderStatus
+            status={agentStatus}
+            onReindex={
+              agentStatus.kind === "ready" || agentStatus.kind === "error"
+                ? handleReindex
+                : undefined
+            }
+          />
         </div>
       </header>
-      <AgentStatus
-        status={agentStatus}
-        onReindex={
-          agentStatus.kind === "ready" || agentStatus.kind === "error"
-            ? handleReindex
-            : undefined
-        }
-      />
       <main className={styles.body}>
         <aside className={styles.left}>
           <ChatPanel

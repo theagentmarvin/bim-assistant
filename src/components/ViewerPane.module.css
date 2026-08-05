@@ -1,7 +1,12 @@
-/* ViewerPane.module.css — slim toolbar + canvas only. Properties
- * panel moved to the App-level right rail; PDF viewer lives in its
- * own column. Both removed from this wrapper to keep the split-view
- * single-purpose.
+/* ViewerPane.module.css — canvas only.
+ *
+ * Boss 2026-08-05 19:20 — toolbar (with "Sin sección seleccionada"
+ * label + Reset View button) removed from this wrapper. Reset View
+ * is now a floating button rendered inside Viewer3D itself
+ * (anchored under the NavCube); the section label is duplicated in
+ * the MappedSidebar so dropping it here doesn't lose information.
+ * ViewerPane is kept as a pass-through so the App-level import
+ * surface stays stable.
  */
 
 .pane {
@@ -15,64 +20,6 @@
   min-height: 0;
   background: var(--ff-bg-canvas);
   position: relative;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 32px;
-  padding: 0 12px;
-  background: var(--ff-bg-panel);
-  border-bottom: 1px solid var(--ff-border);
-  flex-shrink: 0;
-}
-
-.toolbarLabel {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ff-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 70%;
-}
-
-.toolbarHint {
-  font-size: 10px;
-  color: var(--ff-text-muted);
-  white-space: nowrap;
-}
-
-.toolbarRight {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.toolbarResetBtn {
-  font-family: var(--ff-font-stack);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ff-text-primary);
-  background: var(--ff-bg-app);
-  border: 1px solid var(--ff-border);
-  border-radius: var(--ff-radius-control);
-  padding: 3px 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
-}
-
-.toolbarResetBtn:hover {
-  background: var(--ff-blue-active);
-  color: #fff;
-  border-color: var(--ff-blue-active);
-}
-
-.toolbarResetBtn:active {
-  transform: translateY(1px);
 }
 
 .canvas {

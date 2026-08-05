@@ -123,6 +123,12 @@ interface Props {
    *  model. Boss directive 2026-07-27 09:40 — reset view should not
    *  reload the IFC. */
   resetTrigger?: number;
+  /** Callback fired by the floating Reset View button (anchored under
+   *  the NavCube at top: 146px, right: 10px). The parent supplies the
+   *  action — typically clearing agent filter / user selection filter
+   *  / selected element AND bumping resetTrigger. Optional: if not
+   *  provided, the floating button is not rendered. */
+  onResetView?: () => void;
 }
 
 class EB extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -136,7 +142,7 @@ class EB extends React.Component<{ children: React.ReactNode }, { error: Error |
 
 export default function Viewer3D(p: Props) { return <EB><V {...p} /></EB>; }
 
-function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElementClick, onElementData, resetTrigger }: Props) {
+function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElementClick, onElementData, resetTrigger, onResetView }: Props) {
   const cr = useRef<HTMLDivElement | null>(null);
   const compR = useRef<OBC.Components | null>(null);
   const fragsR = useRef<OBC.FragmentsManager | null>(null);
@@ -937,6 +943,25 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
       </div>
       {selectedIfcClass && (
         <div className={styles.classBadge}><span className={styles.classBadgeLabel}>highlight:</span>{selectedIfcClass}</div>
+      )}
+      {/* Boss 2026-08-05 19:20 — floating Reset View button, anchored
+       * under the NavCube at top-right of the canvas. 128px wide to
+       * match the cube width; sits 8px below the cube's bottom edge
+       * (10 + 128 + 8 = 146). z-index 12 — above the cube's 11, below
+       * any future modal/overlay. Always visible (no conditional
+       * "show only when camera moved" logic) for predictable UX;
+       * future improvement could hide it until the user has actually
+       * moved the camera. */}
+      {onResetView && (
+        <button
+          type="button"
+          className={styles.floatingResetBtn}
+          onClick={onResetView}
+          title="Reset 3D view — re-centers camera and clears highlights"
+          aria-label="Reset 3D view"
+        >
+          ⟳ Reset view
+        </button>
       )}
     </div>
   );

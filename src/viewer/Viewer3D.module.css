@@ -86,6 +86,51 @@
   margin-right: 6px;
 }
 
+/* Floating Reset View button — anchored under the NavCube
+ * (top-right corner of the canvas). 128px wide matches the cube
+ * width for visual alignment; sits 8px below the cube's bottom
+ * edge (10 + 128 + 8 = 146). z-index 12 keeps it above the cube's
+ * 11 while remaining below error overlays. Same hover/active
+ * language as the cube wrapper so the affordance reads as part
+ * of the viewer chrome.
+ *
+ * Boss 2026-08-05 19:20 — this replaces the previous toolbar-row
+ * Reset button that used to live in ViewerPane. Anchoring it under
+ * the cube keeps it contextual to the viewer without burning a
+ * horizontal row in the layout. */
+.floatingResetBtn {
+  position: absolute;
+  top: 146px;
+  right: 10px;
+  width: 128px;
+  height: 36px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--ff-bg-panel);
+  border: 1px solid var(--ff-border);
+  border-radius: 4px;
+  color: var(--ff-text-primary);
+  font-family: var(--ff-font-stack);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.floatingResetBtn:hover {
+  background: var(--ff-blue-active);
+  color: #fff;
+  border-color: var(--ff-blue-active);
+}
+
+.floatingResetBtn:active {
+  transform: translateY(1px);
+}
+
 /* Error overlay — visible only when the viewer fails to initialize. */
 .errorOverlay {
   position: absolute;

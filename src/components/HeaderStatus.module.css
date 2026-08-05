@@ -1,0 +1,107 @@
+/* HeaderStatus.module.css
+ *
+ * Compact trigger + popover for the agent status pill in the
+ * title bar. Sits in the header's right-side cluster alongside
+ * the "X secciones" meta pill. The popover anchors to the
+ * trigger's right edge and drops below it (right: 0, top:
+ * calc(100% + 6px)) so it doesn't push the header's vertical
+ * rhythm.
+ *
+ * Trigger colors mirror AgentStatus's `.bar[data-kind=...]`
+ * palette (indexing = brand surface, ready = arq tag, error =
+ * red) so the pill communicates status at a glance even when
+ * closed.
+ */
+
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--ff-border);
+  border-radius: 11px;
+  font-family: var(--ff-font-stack);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ff-text-secondary);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.trigger:hover {
+  background: var(--ff-bg-hover);
+  border-color: var(--ff-blue-active);
+  color: var(--ff-text-primary);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--ff-blue-active);
+  outline-offset: 2px;
+}
+
+.trigger[aria-expanded="true"] {
+  background: var(--ff-bg-hover);
+  border-color: var(--ff-blue-active);
+  color: var(--ff-text-primary);
+}
+
+.trigger[data-kind="indexing"] {
+  color: var(--ff-text-primary);
+  background: var(--ff-brand-surface);
+  border-color: transparent;
+}
+
+.trigger[data-kind="ready"] {
+  color: var(--ff-tag-arq-text);
+  background: var(--ff-tag-arq-bg);
+  border-color: transparent;
+}
+
+.trigger[data-kind="error"] {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: rgba(153, 27, 27, 0.3);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.text {
+  white-space: nowrap;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  width: 320px;
+  background: var(--ff-bg-app);
+  border: 1px solid var(--ff-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.popoverHeader {
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ff-text-muted);
+  background: var(--ff-bg-panel);
+  border-bottom: 1px solid var(--ff-border);
+}

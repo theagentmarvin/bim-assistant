@@ -20,6 +20,8 @@ import {
   putEmbeddings,
   putMeta,
   getMeta,
+  getAllChunks,
+  getAllEmbeddings,
   resetIndex,
 } from "../data/storage";
 import { embed } from "./retriever";
@@ -34,7 +36,25 @@ export type IndexProgressCallback = (e: IndexProgressEvent) => void;
 
 const META_HASH_KEY = "index.hash.v1";
 const META_TS_KEY = "index.timestamp.v1";
+// Boss 2026-08-05 — second hash key that gates the indexer's FAST
+// PATH. Hashes the raw PDF bytes + bundle identity BEFORE running
+// pdfjs extraction. On a cache hit we skip the 5–10s of getDocument +
+// getTextContent calls and return the existing chunk/embedding counts
+// from IndexedDB. See `computeSourceHash` below.
+const SOURCE_HASH_KEY = "index.sourceHash.v1";
 const META_VERSION = "3"; // bump when chunk shape changes (Boss 2026-07-30: flattened psets added → invalidate IndexedDB)
+
+// Cheap FNV-1a 32-bit hash for byte arrays. Same algorithm as
+// `hashInputs` (string variant below) — kept inline so we don't
+// pull in a dep just for this.
+function fnv1aBytes(bytes: Uint8Array): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i += 1) {
+    hash ^= bytes[i];
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
+}
 
 // ---------- Chunking ----------
 
@@ -249,12 +269,61 @@ function hashInputs(
 
 // ---------- Public entry point ----------
 
+/**
+ * Boss 2026-08-05 — fast-path gate. Hashes the raw PDF bytes plus
+ * a tiny bundle-identity tag, and compares to the value stashed in
+ * IndexedDB at the end of the last successful index. On a hit we
+ * return immediately without invoking pdfjs / Fireworks / the chunk
+ * pipeline. Browser cache or HTTP 304 revalidation keeps the fetch
+ * cheap after the first load — typically <50ms in dev, near-instant
+ * in production where the PDF is served with long cache headers.
+ *
+ * Bundle identity is intentionally minimal (array lengths only) —
+ * the JSON sources are bundled with the app, so any source change
+ * shows up as a length delta. Including `META_VERSION` so chunk-shape
+ * bumps (e.g. flattened psets) still invalidate the cache even when
+ * the source files are identical.
+ */
+async function computeSourceHash(): Promise<string> {
+  const pdfResp = await fetch("/eett-c.pdf");
+  if (!pdfResp.ok) throw new Error(`PDF HEAD failed: ${pdfResp.status}`);
+  const pdfBytes = new Uint8Array(await pdfResp.arrayBuffer());
+  const pdfHash = fnv1aBytes(pdfBytes);
+  const elementsLen =
+    (bimElementsRaw as { elements?: unknown[] }).elements?.length ?? 0;
+  const mappingsLen =
+    (mappingPresetsRaw as { mappings?: unknown[] }).mappings?.length ?? 0;
+  return `pdf:${pdfHash}:el:${elementsLen.toString(16)}:mp:${mappingsLen.toString(16)}:v:${META_VERSION}`;
+}
+
 export async function indexAll(
   onProgress: IndexProgressCallback,
   opts: { force?: boolean } = {},
 ): Promise<void> {
   try {
+    // Source-hash fast path. Runs FIRST so a cache hit skips pdfjs
+    // extraction entirely (Boss 2026-08-05 — was waiting 5-10s on
+    // every page reload while the previous code re-extracted PDF
+    // text before checking the cache).
     onProgress({ phase: "start", total: 0 });
+    const sourceHash = await computeSourceHash();
+    const existingSourceHash = opts.force
+      ? null
+      : await getMeta<string>(SOURCE_HASH_KEY);
+    if (existingSourceHash === sourceHash) {
+      const [cachedChunks, cachedEmbs] = await Promise.all([
+        getAllChunks(),
+        getAllEmbeddings(),
+      ]);
+      onProgress({
+        phase: "done",
+        chunks: cachedChunks.length,
+        embeddings: cachedEmbs.length,
+      });
+      return;
+    }
+
+    // Cache miss / stale / forced — full extraction.
     const modeloChunks = chunkModelo();
     const mapeosChunks = chunkMapeos();
     const specChunks = await chunkEspecificacion();
@@ -266,12 +335,6 @@ export async function indexAll(
     const total = allChunks.length;
     onProgress({ phase: "start", total });
 
-    const newHash = hashInputs(modeloChunks, mapeosChunks, specChunks);
-    const existingHash = opts.force ? null : await getMeta<string>(META_HASH_KEY);
-    if (existingHash === newHash) {
-      onProgress({ phase: "done", chunks: total, embeddings: total });
-      return;
-    }
     if (opts.force) await resetIndex();
 
     // Index corpus-by-corpus so the progress UI is informative.
@@ -316,8 +379,12 @@ export async function indexAll(
         await putEmbeddings(embs);
       }
     }
-    await putMeta(META_HASH_KEY, newHash);
+    await putMeta(SOURCE_HASH_KEY, sourceHash);
     await putMeta(META_TS_KEY, new Date().toISOString());
+    // Best-effort write of the legacy text-hash key — keeps older
+    // tooling (and the Reindex button's existing restore path) happy
+    // if anything still reads it.
+    await putMeta(META_HASH_KEY, hashInputs(modeloChunks, mapeosChunks, specChunks));
     onProgress({ phase: "done", chunks: total, embeddings: embCount });
   } catch (err) {
     onProgress({

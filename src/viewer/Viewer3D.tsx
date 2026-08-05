@@ -308,6 +308,20 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
         try { w.camera.controls!.removeEventListener("update", updateVcOrientation); } catch { /* */ }
         try { viewCubeBox.remove(); } catch { /* */ }
       };
+
+      // Boss 2026-08-05 — stop the pointerdown / pointerup bubbles
+      // here so a click on the nav cube never reaches the canvas
+      // pointer handler below. (The previous "ignore child overlays"
+      // check at the canvas handler used `ev.target !== cr.current`,
+      // which is broken — the renderer's injected <canvas> is a
+      // CHILD of cr.current, so every click failed the check and
+      // selection was completely disabled. The cube is the only
+      // pointer-active child of cr.current we need to exclude; the
+      // statusOverlay / classBadge are siblings with
+      // `pointer-events: none` and never bubble through here.)
+      const stopCube = (e: Event) => e.stopPropagation();
+      viewCubeBox.addEventListener("pointerdown", stopCube);
+      viewCubeBox.addEventListener("pointerup", stopCube);
     }
 
     worldR.current = w; c.init();
@@ -461,11 +475,15 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
           if (ev.button !== 0) return;                                  // left-click only
           if (disR.current || !loadedR.current) return;
           if (!cr.current) return;
-          // v1.1 (Boss 2026-08-04 09:58): ignore clicks that land on a
-          // child overlay (nav cube, status badge, etc.). Pointer events
-          // bubble up from children to cr.current, but we only want to
-          // pick when the user clicks the canvas surface itself.
-          if (ev.target !== cr.current) return;
+          // Boss 2026-08-05 — removed `if (ev.target !== cr.current) return;`.
+          // The renderer injects the actual <canvas> INSIDE cr.current,
+          // so ev.target is always that canvas element, never
+          // cr.current itself. The previous check rejected every click
+          // and made selection completely broken. The only child we
+          // actually need to exclude is the nav cube — handled by
+          // viewCubeBox.stopPropagation above. The statusOverlay /
+          // classBadge are siblings of cr.current with
+          // `pointer-events: none` so they don't reach this handler.
           // Defer the raycast until pointerup so we can distinguish
           // a click (pick) from a drag (preserve selection). Capture
           // the pointer so pointermove/pointerup still fire on the
@@ -500,10 +518,12 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
 
           if (disR.current || !loadedR.current) return;
           if (!cr.current) return;
-          // v1.1 (Boss 2026-08-04 09:58): mirror the pointerdown guard
-          // — if the gesture started on the canvas but ended on an
-          // overlay child (e.g., nav cube), don't pick on release.
-          if (ev.target !== cr.current) return;
+          // Boss 2026-08-05 — removed the symmetric `ev.target !== cr.current`
+          // guard that mirrored the pointerdown check. Same bug as
+          // above: ev.target is the inner <canvas>, never cr.current.
+          // The setPointerCapture at pointerdown ensures pointerup
+          // always lands here regardless of where the cursor went,
+          // so we don't need a target guard at release.
           const items = itemsR.current; if (!items) return;
           const hl = hlR.current;      if (!hl) return;
           const w = worldR.current;     if (!w) return;

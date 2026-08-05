@@ -32,7 +32,10 @@ import {
 } from "./data/prompts";
 import type { ElementClickData, ElementProperties } from "./viewer/Viewer3D";
 import { runAgentLoop } from "./agent/loop";
-import { buildTableContextPreamble } from "./agent/tools";
+import {
+  buildTableContextPreamble,
+  clearTablaRefinementCache,
+} from "./agent/tools";
 import {
   indexAll,
   forceReindex,
@@ -194,6 +197,10 @@ export default function App() {
   // stays intact.
   const handleClearTable = useCallback(() => {
     setLatestTable(null);
+    // Boss 2026-08-05 (R2) — clear the refinement cache so the next
+    // refinement call doesn't operate on stale rows from the
+    // freshly-cleared table.
+    clearTablaRefinementCache();
     setSelectedRowIndex(null);
     setUserSelectionFilter(null);
     setSelectedElement(null);
@@ -461,6 +468,9 @@ export default function App() {
     setPdfPage(1);
     setPdfSectionId(null);
     setLatestTable(null);
+    // Boss 2026-08-05 (R2) — clear the refinement cache so a full
+    // reset doesn't leave stale rows in `lastTablaCache`.
+    clearTablaRefinementCache();
     // Boss 2026-08-05 11:40 — reset to the default ("open"), matching
     // the initial state. Earlier this was "expanded"; with the
     // binary closed/open model the button now starts and resets to

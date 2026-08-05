@@ -133,6 +133,41 @@ export interface TablaSpec {
     operacion: OperacionCalculo;
     columna: string;
   };
+  /**
+   * Boss 2026-08-05 (R2: incremental refinement) — when set,
+   * operates on the cached rows from the previous buildTabla call
+   * instead of re-querying bim_elements.json. The refinement
+   * inherits the class context from the cache, so the clase_ifc
+   * field is ignored when refinar is present. See the report's
+   * §Recommendation 2 for the full spec.
+   */
+  refinar?: RefinarSpec;
+}
+
+/**
+ * Boss 2026-08-05 (R2) — refinement operations applied to the
+ * cached raw rows from a previous buildTabla call. See
+ * refinarTabla() and the report's §Recommendation 2 for the full
+ * semantics (filter, sort, add/remove columns, restore the
+ * unfiltered row set).
+ */
+export interface RefinarSpec {
+  /** Keep only rows where `columna` matches `valor`. Default
+   *  operador is "igual" (exact match). */
+  filtrar_por?: {
+    columna: string;
+    valor: string;
+    operador?: "igual" | "contiene" | "mayor_que" | "menor_que";
+  };
+  /** Add columns from available_properties to the display. */
+  agregar_columnas?: string[];
+  /** Hide (don't delete) these columns from display. */
+  quitar_columnas?: string[];
+  /** Re-sort the cached rows by this column. */
+  ordenar_por?: { columna: string; direccion: "asc" | "desc" };
+  /** Restore the original unfiltered row set. Re-queries
+   *  bim_elements.json with the cached clase_ifc. */
+  quitar_filtro?: boolean;
 }
 
 export interface ConsultarArgs {
@@ -516,11 +551,215 @@ function detectEmptyColumns(
  * from `modelo` corpus — spec/PDF rows don't carry structured
  * properties in this PoC.
  */
+/**
+ * Boss 2026-08-05 (R2: incremental refinement) — module-level
+ * cache of the last successful listing-path buildTabla() call's
+ * source rows + column metadata. Consumed by refinarTabla() to
+ * skip the bim_elements re-query on the next call. Mutated on
+ * every cacheable build; cleared via clearTablaRefinementCache()
+ * from App.tsx on table-reset paths.
+ *
+ * TOTAL rows from calcular_cantidades are NOT a concern — the
+ * cache stores raw BIM elements (not projected filas); the TOTAL
+ * row only exists in the projected filas and is reconstructed on
+ * every refinement. Re-issuing `calcular` on a refined spec
+ * re-computes the aggregate (per the report's "Aggregate edge
+ * case" mitigation).
+ */
+let lastTablaCache: {
+  rows: Array<Record<string, unknown>>;
+  express_ids: number[][];
+  columnas: string[];
+  available_properties: string[];
+  clase_ifc?: string;
+} | null = null;
+
+/**
+ * Boss 2026-08-05 (R2) — clear the module-level refinement cache.
+ * Called by App.tsx on every `setLatestTable(null)` path (× button
+ * via handleClearTable, full session reset via handleReset, and
+ * any other table-invalidation point). Pure — does not emit events.
+ */
+export function clearTablaRefinementCache(): void {
+  lastTablaCache = null;
+}
+
+/**
+ * Boss 2026-08-05 (R2) — apply refinement operations to the cached
+ * raw rows. Operates on the cache instead of re-querying
+ * bim_elements. Bypasses buildTabla's `clase_ifc` guard. Pure —
+ * does not mutate the cache; buildTabla re-assigns lastTablaCache
+ * after the refinement completes.
+ *
+ * Pipeline order (matches the report's spec):
+ *   1. filtrar_por   — narrow rows
+ *   2. columnas      — adjust display (agregar/quitar)
+ *   3. ordenar_por   — sort by column
+ *   4. quitar_filtro — restore full row set (re-query if needed)
+ *   5. compute calculate totals (if spec.calcular is present)
+ *   6. project fresh filas and return the new table
+ */
+function refinarTabla(
+  cache: NonNullable<typeof lastTablaCache>,
+  refinar: RefinarSpec,
+  spec: TablaSpec,
+): QuantificationTable | undefined {
+  let { rows, express_ids, columnas } = cache;
+
+  // 1. Apply row filter.
+  if (refinar.filtrar_por) {
+    const { columna, valor, operador } = refinar.filtrar_por;
+    const indices: number[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const cellRaw = rows[i][columna];
+      const v = String(cellRaw ?? "").toLowerCase();
+      const target = valor.toLowerCase();
+      let match: boolean;
+      if (operador === "contiene") match = v.includes(target);
+      else if (operador === "mayor_que") match = Number(v) > Number(target);
+      else if (operador === "menor_que") match = Number(v) < Number(target);
+      else match = v === target; // default "igual"
+      if (match) indices.push(i);
+    }
+    rows = indices.map((i) => rows[i]);
+    express_ids = indices.map((i) => express_ids[i] ?? []);
+  }
+
+  // 2. Add/remove columns from display.
+  if (refinar.agregar_columnas) {
+    columnas = [
+      ...columnas,
+      ...refinar.agregar_columnas.filter((c) => !columnas.includes(c)),
+    ];
+  }
+  if (refinar.quitar_columnas) {
+    const quitar = refinar.quitar_columnas;
+    columnas = columnas.filter((c) => !quitar.includes(c));
+  }
+
+  // 3. Sort by column. Compare helper is local to tools.ts (per the
+  //    report's "Sort race" risk — keep the dependency here so we
+  //    don't import from QuantificationPanel).
+  if (refinar.ordenar_por) {
+    const { columna, direccion } = refinar.ordenar_por;
+    const dir = direccion === "desc" ? -1 : 1;
+    const indexed = rows.map((r, i) => ({
+      row: r,
+      ids: express_ids[i] ?? [],
+    }));
+    indexed.sort(
+      (a, b) => compareRefinementCell(a.row[columna], b.row[columna]) * dir,
+    );
+    rows = indexed.map((x) => x.row);
+    express_ids = indexed.map((x) => x.ids);
+  }
+
+  // 4. Restore full row set (re-query bim_elements with cached class).
+  if (refinar.quitar_filtro) {
+    const all = cache.clase_ifc
+      ? getBimElements().filter((r) => r.ifc_class === cache.clase_ifc)
+      : getBimElements();
+    rows = all;
+    express_ids = all.map((r) =>
+      typeof r.express_id === "number" ? [r.express_id] : [],
+    );
+  }
+
+  // Re-project fresh filas from the refined raw rows.
+  const availableColumns = getScalarTopLevelKeys(rows);
+  const validColumns = columnas.filter(
+    (c) => resolveColumnKey(c, availableColumns) !== null,
+  );
+  if (validColumns.length === 0) return undefined;
+  const filas = rows.map((r) =>
+    projectRowFull(r, validColumns, availableColumns),
+  );
+
+  // 5. Re-run `calcular` on the refined rows if the new spec asks.
+  let totales: TotalesSpec | undefined;
+  if (spec.calcular) {
+    const targetCol = spec.calcular.columna;
+    const resolvedKey =
+      resolveColumnKey(targetCol, availableColumns) ?? undefined;
+    const values: number[] = [];
+    for (const row of filas) {
+      const v = readNumericCell(row[targetCol]);
+      if (v !== null) values.push(v);
+    }
+    if (values.length > 0) {
+      const valor = aggregateValues(values, spec.calcular.operacion);
+      const unidad = resolvedKey ? getUnitForProperty(resolvedKey) : undefined;
+      const formatted = unidad
+        ? `${valor.toFixed(3)} ${unidad}`
+        : valor.toFixed(3);
+      const totalRow: Record<string, string | number | boolean> = {
+        _tipo: "total",
+      };
+      for (const col of validColumns) {
+        totalRow[col] = col === targetCol ? formatted : "—";
+      }
+      filas.push(totalRow);
+      express_ids.push([]);
+      totales = {
+        operacion: spec.calcular.operacion,
+        columna: targetCol,
+        valor,
+        unidad,
+      };
+    }
+  }
+
+  return {
+    titulo: spec.titulo ?? `Refinado (${filas.length})`,
+    columnas: validColumns,
+    filas,
+    filas_express_ids: express_ids,
+    available_properties: computeAvailableProperties(filas, validColumns),
+    fuente: "modelo",
+    generadaEn: new Date().toISOString(),
+    totales,
+  };
+}
+
+/**
+ * Boss 2026-08-05 (R2) — compare helper for refinement sort.
+ * Inlined per the report's "Sort race" risk (keep the dependency
+ * local to tools.ts so the refinement module doesn't depend on
+ * the panel). Returns -1 / 0 / 1 for ascending; numbers compared
+ * numerically, strings case-insensitively, nulls sorted last.
+ */
+function compareRefinementCell(a: unknown, b: unknown): number {
+  if (a === b) return 0;
+  if (a === undefined || a === null) return 1;
+  if (b === undefined || b === null) return -1;
+  if (typeof a === "number" && typeof b === "number") {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+  const sa = String(a).toLowerCase();
+  const sb = String(b).toLowerCase();
+  return sa < sb ? -1 : sa > sb ? 1 : 0;
+}
+
+/**
+ * Build a structured `tabla` from bim_elements.json. Only sourced
+ * from `modelo` corpus — spec/PDF rows don't carry structured
+ * properties in this PoC.
+ */
 export function buildTabla(
   fuente: "modelo" | "especificacion" | "mapeos",
   spec: TablaSpec,
 ): QuantificationTable | undefined {
   if (fuente !== "modelo") return undefined;
+  // Boss 2026-08-05 (R2: incremental refinement) — refinement path.
+  // Operates on the cached raw rows from the previous listing-path
+  // buildTabla call instead of re-querying bim_elements.json.
+  // Bypasses the Boss #14905 safeguard (the refinement inherits the
+  // class context from the cache). On cache miss we fall through to
+  // the safeguard below so the chat response becomes prose only.
+  if (spec.refinar && lastTablaCache) {
+    const refined = refinarTabla(lastTablaCache, spec.refinar, spec);
+    if (refined) return refined;
+  }
   // Boss #14905 safeguard: refuse to build a table with neither a
   // class filter nor a grouping. Without one of these, the table
   // would dump every BIM element in the model — usually a sign the
@@ -623,12 +862,30 @@ export function buildTabla(
       };
     }
   }
+  // Boss 2026-08-05 (R2) — populate the refinement cache so the next
+  // call with `refinar` can operate on this row set without
+  // re-querying bim_elements.json. The cache stores raw elements
+  // (not projected filas), so the TOTAL row never enters the cache
+  // and refinements always re-project cleanly. Grouping path does
+  // NOT touch the cache (aggregation isn't refinement-eligible).
+  const cachedAvailableProperties = computeAvailableProperties(
+    filas,
+    validColumns,
+  );
+  lastTablaCache = {
+    rows,
+    express_ids: filas_express_ids,
+    columnas: validColumns,
+    available_properties: cachedAvailableProperties,
+    clase_ifc: spec.clase_ifc,
+  };
+
   return {
     titulo: spec.titulo ?? defaultTitulo(spec, filas.length),
     columnas: validColumns,
     filas,
     filas_express_ids,
-    available_properties: computeAvailableProperties(filas, validColumns),
+    available_properties: cachedAvailableProperties,
     fuente: "modelo",
     generadaEn: new Date().toISOString(),
     totales,

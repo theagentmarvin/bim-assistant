@@ -86,6 +86,68 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
               type: "string",
               description: "Título en español para la cabecera de la tabla.",
             },
+            refinar: {
+              type: "object",
+              description:
+                "Boss 2026-08-05 (R2) — refina la tabla activa del último buildTabla. Reemplaza la reconstrucción desde cero. Bypassea el safeguard de clase_ifc; el refinamiento hereda el contexto de clase del cache.",
+              properties: {
+                filtrar_por: {
+                  type: "object",
+                  description:
+                    "Filtra filas según una columna y un valor. Default operador=igual.",
+                  properties: {
+                    columna: {
+                      type: "string",
+                      description: "Etiqueta de la columna a evaluar.",
+                    },
+                    valor: {
+                      type: "string",
+                      description: "Valor a comparar (como string).",
+                    },
+                    operador: {
+                      type: "string",
+                      enum: ["igual", "contiene", "mayor_que", "menor_que"],
+                      description: "Operador de comparación. Default igual.",
+                    },
+                  },
+                },
+                agregar_columnas: {
+                  type: "array",
+                  description: "Columnas a agregar al display (de available_properties).",
+                  items: {
+                    type: "string",
+                    description: "Etiqueta de columna en español.",
+                  },
+                },
+                quitar_columnas: {
+                  type: "array",
+                  description: "Columnas a ocultar del display (no se eliminan).",
+                  items: {
+                    type: "string",
+                    description: "Etiqueta de columna en español.",
+                  },
+                },
+                ordenar_por: {
+                  type: "object",
+                  description: "Re-ordena las filas cacheadas por esta columna.",
+                  properties: {
+                    columna: {
+                      type: "string",
+                      description: "Etiqueta de la columna a ordenar.",
+                    },
+                    direccion: {
+                      type: "string",
+                      enum: ["asc", "desc"],
+                      description: "Dirección del orden.",
+                    },
+                  },
+                },
+                quitar_filtro: {
+                  type: "boolean",
+                  description: "Si true, restaura el conjunto de filas original (re-query con el clase_ifc cacheado).",
+                },
+              },
+            },
           },
         },
       },

@@ -139,13 +139,25 @@ export default function CuantificacionDrawer({
         // click event when the mousedown handler calls
         // preventDefault on a div with touch-action: none. We can't
         // rely on onClick firing, so detect a click here: if the
-        // gesture stayed within 5px of the down position AND we
-        // were at peek, treat it as a click-to-expand.
+        // gesture stayed within 5px of the down position, treat it
+        // as a click rather than a drag.
+        //
+        // Boss 2026-08-05 10:05 — handle is a true TOGGLE now so
+        // the cuantificación drawer mirrors the spec column's
+        // click-to-open / click-to-close pattern. Click at peek →
+        // expanded. Click at expanded / full → peek. Drag (movement
+        // ≥ 5px) still snaps to the nearest state via the
+        // height-driven branch below.
+        const isClick = r.peakDeltaY < 5;
         const isClickToExpand =
-          state === "peek" && !r.wasNonPeek && r.peakDeltaY < 5;
+          isClick && state === "peek" && !r.wasNonPeek;
+        const isClickToCollapse =
+          isClick && (state === "expanded" || state === "full");
 
         if (isClickToExpand) {
           onStateChange("expanded");
+        } else if (isClickToCollapse) {
+          onStateChange("peek");
         } else {
           if (r.wasNonPeek && snapped === "peek") {
             onDragCollapseToPeek?.();
@@ -192,16 +204,18 @@ export default function CuantificacionDrawer({
     return `${total} fila${total === 1 ? "" : "s"}`;
   }, [data]);
 
-  // Boss 2026-08-05 09:58 — onHandleClick is now a defensive
-  // fallback only. The real click-to-expand path lives in onUp's
-  // `isClickToExpand` branch because Chrome swallows the synthetic
-  // click event when the mousedown handler calls preventDefault on
-  // a div with touch-action: none. If the click event DOES fire in
-  // some browser, this still expands the drawer — onStateChange is
-  // idempotent (calling it with the current state is a no-op).
+  // Boss 2026-08-05 10:05 — onHandleClick is a defensive fallback
+  // for any browser that does fire the click event. The real
+  // toggle path lives in onUp's isClickToExpand / isClickToCollapse
+  // branches because Chrome swallows the synthetic click event
+  // when the mousedown handler calls preventDefault on a div with
+  // touch-action: none. onStateChange is idempotent (calling it
+  // with the current state is a no-op) so a double-fire is safe.
   const onHandleClick = () => {
     if (state === "peek") {
       onStateChange("expanded");
+    } else if (state === "expanded" || state === "full") {
+      onStateChange("peek");
     }
   };
 

@@ -7,10 +7,11 @@
 // (resaltarCallback, abrirPdfCallback) so this module stays decoupled
 // from the React component tree.
 
-import type { Filter } from "../types";
+import type { Filter, Mapping } from "../types";
 import { retrieveSnippets, embed } from "./retriever";
 import type { RetrievedHit } from "./retriever";
 import bimElementsRaw from "../../data/bim_elements.json";
+import mappingPresetsRaw from "../../data/mapping_presets.json";
 import type {
   OperacionCalculo,
   QuantificationTable,
@@ -52,6 +53,11 @@ export interface ConsultarResult {
    *  The agent uses these warnings to suggest alternatives to the
    *  user from the table's available_properties field. */
   warnings?: string[];
+  /** Stage 1 Improvement 1 — agent-driven sidebar filtering.
+   *  When the agent sets `filtrar_mapeos`, the tool returns the list
+   *  of matching section_ids. The sidebar renders only those cards
+   *  with an "Agente: filtrando N secciones" indicator. */
+  tarjetas_visibles?: string[];
 }
 
 export interface ResaltarResult {
@@ -176,10 +182,28 @@ export interface RefinarSpec {
   quitar_filtro?: boolean;
 }
 
+/** Stage 1 Improvement 1 — agent-driven sidebar filtering.
+ *  When the agent sets this, the tool filters mapping_presets.json
+ *  in-memory and returns `tarjetas_visibles` in the result. */
+export interface FiltrarMapeosSpec {
+  /** Only sections mapped to this ifc_class. */
+  ifc_class?: string;
+  /** Only sections whose top result's pass matches. */
+  pass?: string | string[];
+  /** Only sections whose top result confidence ≥ this. */
+  conf_min?: number;
+  /** Only sections with this status ("mapped" | "review"). */
+  status?: string;
+  /** Fuzzy text search on section_title + rationale. */
+  query?: string;
+}
+
 export interface ConsultarArgs {
   pregunta: string;
   fuente?: "modelo" | "especificacion" | "mapeos" | "auto";
   tabla?: TablaSpec;
+  /** Stage 1 Improvement 1 — agent-driven sidebar filtering. */
+  filtrar_mapeos?: FiltrarMapeosSpec;
 }
 
 /**
@@ -950,6 +974,52 @@ export function buildTabla(
   };
 }
 
+/**
+ * Stage 1 Improvement 1 — filter mapping_presets.json in-memory
+ * and return matching section_ids for the sidebar.
+ */
+function filtraMapeos(spec: FiltrarMapeosSpec | undefined): string[] | undefined {
+  if (!spec) return undefined;
+  const data = mappingPresetsRaw as unknown as { mappings?: Mapping[] };
+  const mappings = data.mappings ?? [];
+  let filtered = mappings;
+
+  if (spec.ifc_class) {
+    const cls = spec.ifc_class;
+    filtered = filtered.filter((m) =>
+      m.results.some((r) => r.ifc_class === cls),
+    );
+  }
+  if (spec.pass !== undefined) {
+    const passes = Array.isArray(spec.pass) ? spec.pass : [spec.pass];
+    filtered = filtered.filter((m) => {
+      const top = m.results[0];
+      return top && passes.includes(top.pass);
+    });
+  }
+  if (spec.conf_min !== undefined) {
+    const min = spec.conf_min;
+    filtered = filtered.filter((m) => {
+      const top = m.results[0];
+      return top && top.conf >= min;
+    });
+  }
+  if (spec.status) {
+    filtered = filtered.filter((m) => m.status === spec.status);
+  }
+  if (spec.query) {
+    const q = spec.query.toLowerCase();
+    filtered = filtered.filter((m) => {
+      const title = (m.section_title ?? "").toLowerCase();
+      if (title.includes(q)) return true;
+      return m.results.some((r) =>
+        (r.rationale ?? "").toLowerCase().includes(q),
+      );
+    });
+  }
+  return filtered.length > 0 ? filtered.map((m) => m.section_id) : [];
+}
+
 export async function toolConsultarBaseDeConocimiento(
   args: ConsultarArgs,
   ctx: ToolContext,
@@ -1017,6 +1087,12 @@ export async function toolConsultarBaseDeConocimiento(
       }
     }
   }
+  // Stage 1 Improvement 1 — agent-driven sidebar filtering.
+  // Filter mapping_presets.json in-memory and return matching
+  // section_ids. The App.tsx extracts `tarjetas_visibles` from
+  // the result and passes it to MappedSidebar.agentFilterIds.
+  const tarjetas_visibles = filtraMapeos(args.filtrar_mapeos);
+
   // Boss 2026-07-30 18:13 — detect columns that have no data for the
   // requested class (e.g., "largo" for IfcWindow — length_m is null
   // in the extract). The agent uses these warnings to suggest
@@ -1038,6 +1114,7 @@ export async function toolConsultarBaseDeConocimiento(
     hits: top,
     tabla,
     warnings: warnings.length > 0 ? warnings : undefined,
+    tarjetas_visibles,
   };
 }
 

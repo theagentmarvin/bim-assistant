@@ -2,17 +2,13 @@
 //
 // Chat-first split-view (3 columns):
 //   - Left rail: ChatPanel (primary surface)
-//   - Center column: Spec PDF (or 44px rail when the cuantificación
-//     drawer leaves peek)
-//   - Right column: ViewerPane + CuantificaciónDrawer (the drawer
-//     slides up from the bottom of the viewer; the viewer shrinks
-//     to compensate)
+//   - Center column: MappedSidebar + PdfViewer (or 44px SpecRail
+//     when closed)
+//   - Right column: ViewerPane + CuantificaciónDrawer
 //
-// Stage 1 of the drawer redesign (see
-// .claude/specs/task-drawer-redesign.md). The properties column
-// was removed from the grid; the ModelPropertyPanel returns as a
-// floating overlay in stage 2. setSelectedElement still fires on
-// row click so the stage-2 hookup is straightforward.
+// Stage 1 (2026-08-05): MappedSidebar integrated from bim-specs-mapper.
+// Agent-driven sidebar filtering + precise filter-expression viewer
+// highlight wired in.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ViewerPane from "./components/ViewerPane";
@@ -25,6 +21,7 @@ import ChatPanel, {
 import CuantificacionDrawer, { type DrawerState } from "./components/CuantificacionDrawer";
 import PropertiesOverlay from "./components/PropertiesOverlay";
 import SpecRail from "./components/SpecRail";
+import MappedSidebar from "./components/MappedSidebar";
 import { loadMappings } from "./data/mappings";
 import {
   getContextualPrompts,
@@ -58,8 +55,8 @@ const MODEL_ID_DEFAULT_IFC_CLASS: string | null = null;
 // (420px). Min/max clamp prevents the user from squeezing the column
 // to nothing or pushing the 3D viewer off-screen.
 const PDF_SLOT_WIDTH_KEY = "bim-as…idth";
-const PDF_SLOT_WIDTH_DEFAULT = 420;
-const PDF_SLOT_WIDTH_MIN = 280;
+const PDF_SLOT_WIDTH_DEFAULT = 380;
+const PDF_SLOT_WIDTH_MIN = 320;
 const PDF_SLOT_WIDTH_MAX = 1000;
 
 // Boss 2026-08-05 — drawer state is intentionally NOT persisted.
@@ -159,7 +156,7 @@ export default function App() {
   // Binary toggle (closed | open). Initial state is open so the
   // cuantificación panel is visible on app load. The agent's auto-
   // expand effect below fires when latestTable changes.
-  const [drawerState, setDrawerState] = useState<DrawerState>("open");
+  const [drawerState, setDrawerState] = useState<DrawerState>("closed");
 
   // Boss 2026-08-05 09:42 — spec column starts CLOSED. Independent
   // of drawerState: the user clicks the SpecRail to open the spec
@@ -228,6 +225,18 @@ export default function App() {
     setSpecOpen(false);
   }, []);
 
+  // Stage 1 Improvement 2 — build a combined filter from all of a
+  // mapping's results. Union with OR so any result's filter can
+  // match. Used by resaltar(seccion_id) + sidebar section click.
+  const buildMappingFilter = useCallback((sectionId: string): Filter | null => {
+    const m = mappings.find((mm) => mm.section_id === sectionId);
+    if (!m || !m.results.length) return null;
+    const filters = m.results.map((r) => r.filter).filter((f) => f.g.length > 0);
+    if (filters.length === 0) return null;
+    if (filters.length === 1) return filters[0];
+    return { c: "OR", g: filters.flatMap((f) => f.g) };
+  }, [mappings]);
+
   // ----- Lookups -----
   const agentMapping = useMemo(
     () => mappings.find((m) => m.section_id === agentMappingId) ?? null,
@@ -251,9 +260,17 @@ export default function App() {
       };
     }
     if (args.seccion_id) {
-      setAgentFilter(null);
       setAgentIfcClass(null);
       setAgentMappingId(args.seccion_id);
+      // Stage 1 Improvement 2: use the mapping's full filter
+      // instead of just ifc_class. Precise highlight — only
+      // the elements the mapping actually targets.
+      const combinedFilter = buildMappingFilter(args.seccion_id);
+      if (combinedFilter) {
+        setAgentFilter(combinedFilter);
+      } else {
+        setAgentFilter(null);
+      }
       const m = mappings.find((mm) => mm.section_id === args.seccion_id);
       const top = m?.results?.[0];
       const criterio = `sección ${args.seccion_id}` + (top ? ` → ${top.ifc_class}` : "");
@@ -429,6 +446,40 @@ export default function App() {
             if (t) {
               setLatestTable(t);
             }
+            // Stage 1 Improvement 1 — extract agent-driven sidebar filter.
+            // When the agent sets filtrar_mapeos, the tool returns
+            // tarjetas_visibles. Null/undefined → clear filter (show all).
+            // Empty array → filter returned nothing (sidebar shows empty state).
+            if (result.result.tarjetas_visibles !== undefined) {
+              setSidebarFilterIds(
+                result.result.tarjetas_visibles.length > 0
+                  ? result.result.tarjetas_visibles
+                  : null,
+              );
+              // Auto-expand spec column when agent filters cards.
+              if (result.result.tarjetas_visibles.length > 0) {
+                setSpecOpen(true);
+                // Auto-isolate: apply the first matching section's
+                // mapping filter to the 3D viewer so elements light
+                // up immediately without a manual card click.
+                const firstId = result.result.tarjetas_visibles[0];
+                const combined = buildMappingFilter(firstId);
+                if (combined) {
+                  setAgentFilter(combined);
+                  setAgentIfcClass(null);
+                  setAgentMappingId(firstId);
+                } else {
+                  // Fallback: if the section has no filter expression,
+                  // highlight by ifc_class instead.
+                  setAgentFilter(null);
+                  setAgentMappingId(firstId);
+                  const m = mappings.find((mm) => mm.section_id === firstId);
+                  if (m?.results?.[0]?.ifc_class) {
+                    setAgentIfcClass(m.results[0].ifc_class);
+                  }
+                }
+              }
+            }
           }
         },
         onFinalAnswer: (text) => {
@@ -477,6 +528,7 @@ export default function App() {
     // the same state.
     setDrawerState("open");
     setSpecOpen(false);
+    setSidebarFilterIds(null);
     userHasCollapsedThisTurnRef.current = false;
   }, []);
 
@@ -585,10 +637,11 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  // Spec column width: pdfSlotWidth when specOpen, 44px rail
-  // otherwise. Boss 2026-08-05 09:42 — decoupled from drawerState;
-  // both panels are independently opened/closed.
+  // Spec column width: pdfSlotWidth when specOpen, 44px otherwise.
   const specColumnWidthPx = specOpen ? pdfSlotWidth : SPEC_RAIL_WIDTH;
+
+  // Stage 1 Improvement 1: agent-driven sidebar filtering.
+  const [sidebarFilterIds, setSidebarFilterIds] = useState<string[] | null>(null);
 
   return (
     <div className={styles.shell}>
@@ -629,18 +682,46 @@ export default function App() {
         >
           {specOpen ? (
             <>
-              <PdfViewer
-                pdfUrl="/eett-c.pdf"
-                currentPage={pdfPage}
-                onPageChange={setPdfPage}
-                onClickSection={(id) => {
-                  setPdfSectionId(id);
-                  const page = sectionIdToPageHeuristic(id);
-                  setPdfPage(page);
-                }}
-                selectedSectionId={pdfSectionId}
-                onCollapse={handleSpecCollapse}
-              />
+              <div className={styles.specCompound}>
+                <div className={styles.specPdfWrap}>
+                  <PdfViewer
+                    pdfUrl="/eett-c.pdf"
+                    currentPage={pdfPage}
+                    onPageChange={setPdfPage}
+                    onClickSection={(id) => {
+                      setPdfSectionId(id);
+                      const page = sectionIdToPageHeuristic(id);
+                      setPdfPage(page);
+                    }}
+                    selectedSectionId={pdfSectionId}
+                    onCollapse={handleSpecCollapse}
+                  />
+                </div>
+                <MappedSidebar
+                  mappings={mappings}
+                  selectedId={agentMappingId ?? pdfSectionId}
+                  onSelect={(id) => {
+                    setPdfSectionId(id);
+                    const combined = buildMappingFilter(id);
+                    if (combined) {
+                      setAgentFilter(combined);
+                      setAgentIfcClass(null);
+                      setAgentMappingId(id);
+                    } else {
+                      setAgentFilter(null);
+                      setAgentMappingId(id);
+                      const m = mappings.find((mm) => mm.section_id === id);
+                      if (m?.results?.[0]?.ifc_class) {
+                        setAgentIfcClass(m.results[0].ifc_class);
+                      }
+                    }
+                    const page = sectionIdToPageHeuristic(id);
+                    setPdfPage(page);
+                  }}
+                  activeTab="mapped"
+                  agentFilterIds={sidebarFilterIds}
+                />
+              </div>
               <div
                 className={styles.splitter}
                 onMouseDown={startPanelResize}

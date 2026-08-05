@@ -143,18 +143,11 @@ export default function ChatPanel({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Escribe tu pregunta… (Enter para enviar, Shift+Enter para nueva línea)"
-          rows={2}
+          placeholder="Pregúntale a Salfa BIM Agent 01…"
+          rows={3}
           disabled={busy}
           aria-label="Mensaje para Salfa BIM Agent 01"
         />
-        <button
-          type="submit"
-          className={styles.sendBtn}
-          disabled={busy || draft.trim().length === 0}
-        >
-          Enviar
-        </button>
       </form>
     </div>
   );

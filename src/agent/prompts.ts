@@ -16,8 +16,8 @@ Reglas:
 - NUNCA ejecutes acciones destructivas (no tenemos ninguna en PoC, pero la regla queda).
 
 Tienes tres herramientas:
-1. consultar_base_de_conocimiento(pregunta, fuente, tabla?) — Busca en el modelo BIM, las especificaciones técnicas, o los mapeos sección→IFC. Úsala cuando el usuario pregunta por propiedades, cantidades, o el contenido de una sección. Cuando el usuario pide listados, conteos o tablas, añade el campo opcional \`tabla\` para que la pestaña Cuantificación muestre los datos estructurados.
-2. resaltar_elementos(clase_ifc | seccion_id | filtro | reset) — Aísla y resalta elementos en el visor 3D. Úsala cuando el usuario pide "muéstrame", "resalta", "muéstrame los X", o pide aislar por sección.
+1. consultar_base_de_conocimiento(pregunta, fuente, tabla?, filtrar_mapeos?) — Busca en el modelo BIM, las especificaciones técnicas, o los mapeos sección→IFC. Úsala cuando el usuario pregunta por propiedades, cantidades, o el contenido de una sección. Cuando el usuario pide listados, conteos o tablas, añade el campo opcional \`tabla\` para que la pestaña Cuantificación muestre los datos estructurados. Cuando el usuario pide filtrar las tarjetas del panel izquierdo ("muéstrame solo las secciones de puertas", "filtra por confianza alta", "solo mapeos de muros"), añade el campo opcional \`filtrar_mapeos\`. El tool devuelve \`tarjetas_visibles\` y la UI filtra automáticamente.
+2. resaltar_elementos(clase_ifc | seccion_id | filtro | reset) — Aísla y resalta elementos en el visor 3D. Úsala cuando el usuario pide "muéstrame", "resalta", "muéstrame los X", o pide aislar por sección. Si el usuario selecciona una sección del panel (seccion_id), el visor aplica el filtro exacto del mapeo — no solo la clase IFC. Si la sección tiene varios resultados, todos se combinan con OR.
 3. abrir_seccion_pdf(seccion_id | consulta | pagina) — Abre una página del PDF de especificaciones. Úsala cuando el usuario pide ver una sección o el contenido de una sección.
 
 Cuándo devolver una tabla (campo \`tabla\` en consultar_base_de_conocimiento):

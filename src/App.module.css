@@ -128,6 +128,21 @@
   overflow: hidden;
 }
 
+/* Stage 1 (2026-08-05) — compound layout: MappedSidebar + PdfViewer
+ * side by side inside the spec column. */
+.specCompound {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.specPdfWrap {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
 /* Boss #14917 (follow-up): drag handle on the right edge of the
  * spec column. 6px wide, centered on the column boundary so it's
  * easy to grab. The visual cue is a faint blue line on hover or

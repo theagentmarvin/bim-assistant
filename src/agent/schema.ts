@@ -195,6 +195,35 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
             },
           },
         },
+        filtrar_mapeos: {
+          type: "object",
+          description:
+            "Stage 1 — filtra las tarjetas del panel izquierdo. Úsalo cuando el usuario pida ver solo ciertas secciones de la especificación (ej: 'secciones sobre puertas', 'solo mapeos de muros', 'tarjetas con confianza baja'). Todos los campos son opcionales y se combinan con AND. El tool devuelve tarjetas_visibles con los section_id que cumplen.",
+          properties: {
+            ifc_class: {
+              type: "string",
+              description: "Solo secciones mapeadas a esta clase IFC (ej: 'IfcDoor').",
+            },
+            pass: {
+              type: "string",
+              enum: ["canonical", "high", "medium", "review", "offline"],
+              description: "Solo secciones cuyo mejor resultado tenga este pass. También acepta un array de valores (ej: ['canonical','high']).",
+            },
+            conf_min: {
+              type: "number",
+              description: "Solo secciones con confianza ≥ este número (0-1). Ej: 0.7.",
+            },
+            status: {
+              type: "string",
+              enum: ["mapped", "review", "unmapped"],
+              description: "Solo secciones con este status.",
+            },
+            query: {
+              type: "string",
+              description: "Búsqueda aproximada (fuzzy) sobre section_title + rationale. Ej: 'puerta' encuentra 'Puerta ancho 70', 'Puerta PVC', etc.",
+            },
+          },
+        },
       },
       required: ["pregunta"],
     },

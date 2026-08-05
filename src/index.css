@@ -4,6 +4,12 @@
 
 html, body, #root {
   height: 100%;
+  overflow: hidden; /* Boss 2026-08-05 09:35 — clip document-level scroll.
+                       Each panel (chat, PDF, table) keeps its own
+                       internal scroll handlers, but the viewport itself
+                       never scrolls. The app must fit in 100vh × 100vw
+                       so the cuantificación drawer handle is always
+                       reachable without scrolling the page. */
   font-family: var(--ff-font-stack);
   font-size: var(--ff-font-size-base);
   color: var(--ff-text-primary);

@@ -18,6 +18,10 @@
   display: grid;
   grid-template-rows: auto auto 1fr;
   height: 100vh;
+  overflow: hidden; /* Boss 2026-08-05 09:35 — defensive. Even if a
+                      descendant overflows (long chat bubble, agent
+                      status text, etc.) the document must not scroll.
+                      Each panel handles its own internal scroll. */
   background: var(--ff-bg-app);
 }
 

@@ -355,3 +355,161 @@ describe("buildTabla — calcular_cantidades", () => {
     expect(tabla!.totales!.unidad).toBe("m³");
   });
 });
+
+describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", () => {
+  // Each test rebuilds its own baseline so filter values are pulled
+  // from real cache rows (avoids dependency on hypothetical "Wall-1"
+  // fixtures that don't exist in bim_elements.json).
+
+  it("no_igual excludes rows with matching name", () => {
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    const target = String(baseline.filas[0]["Nombre"] ?? "");
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: { columna: "Nombre", valor: target, operador: "no_igual" },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    // No refined row should still match the target value.
+    expect(refined.filas.every((r) => r["Nombre"] !== target)).toBe(true);
+    // Refined rows = baseline minus the rows whose name matched target.
+    const baselineMatches = baseline.filas.filter(
+      (r) => r["Nombre"] === target,
+    ).length;
+    expect(refined.filas.length).toBe(baseline.filas.length - baselineMatches);
+  });
+
+  it("no_contiene excludes rows whose name contains the substring", () => {
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    // Pick a real substring of the first row's name (first 3 chars).
+    const target = String(baseline.filas[0]["Nombre"] ?? "").slice(0, 3);
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: {
+          columna: "Nombre",
+          valor: target,
+          operador: "no_contiene",
+        },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    expect(
+      refined.filas.every(
+        (r) =>
+          !String(r["Nombre"] ?? "").toLowerCase().includes(target.toLowerCase()),
+      ),
+    ).toBe(true);
+  });
+
+  it("no_mayor_que keeps values <= threshold; skips non-numeric cells", () => {
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Volumen"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    const firstV = baseline.filas[0]["Volumen"];
+    if (typeof firstV !== "number" || !Number.isFinite(firstV)) return;
+    const threshold = firstV;
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: {
+          columna: "Volumen",
+          valor: String(threshold),
+          operador: "no_mayor_que",
+        },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    refined.filas.forEach((r) => {
+      const v = Number(r["Volumen"]);
+      if (Number.isFinite(v)) {
+        expect(v).toBeLessThanOrEqual(threshold);
+      }
+    });
+  });
+
+  it("no_menor_que keeps values >= threshold; skips non-numeric cells", () => {
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Volumen"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    const firstV = baseline.filas[0]["Volumen"];
+    if (typeof firstV !== "number" || !Number.isFinite(firstV)) return;
+    const threshold = firstV;
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: {
+          columna: "Volumen",
+          valor: String(threshold),
+          operador: "no_menor_que",
+        },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    refined.filas.forEach((r) => {
+      const v = Number(r["Volumen"]);
+      if (Number.isFinite(v)) {
+        expect(v).toBeGreaterThanOrEqual(threshold);
+      }
+    });
+  });
+
+  it("default operador is 'igual' (backwards-compatible)", () => {
+    // Build baseline to pick a real name that's actually in the data.
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    const target = String(baseline.filas[0]["Nombre"] ?? "");
+
+    const igualRows = buildTabla("modelo", {
+      refinar: { filtrar_por: { columna: "Nombre", valor: target } },
+    });
+    const negatedRows = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: {
+          columna: "Nombre",
+          valor: target,
+          operador: "no_igual",
+        },
+      },
+    });
+    expect(igualRows).toBeDefined();
+    expect(negatedRows).toBeDefined();
+    if (!igualRows || !negatedRows) return;
+
+    // igualRows ⊆ rows where Nombre === target.
+    expect(igualRows.filas.every((r) => r["Nombre"] === target)).toBe(true);
+    // negatedRows ⊆ rows where Nombre !== target.
+    expect(negatedRows.filas.every((r) => r["Nombre"] !== target)).toBe(true);
+    // Disjoint: no row name appears in both refinements.
+    const igualNames = new Set(igualRows.filas.map((r) => r["Nombre"]));
+    for (const r of negatedRows.filas) {
+      expect(igualNames.has(r["Nombre"])).toBe(false);
+    }
+    // Sum of refined row counts equals baseline count (no rows lost
+    // between igual + no_igual partitioning).
+    expect(igualRows.filas.length + negatedRows.filas.length).toBe(
+      baseline.filas.length,
+    );
+  });
+});

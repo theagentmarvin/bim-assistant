@@ -157,7 +157,7 @@ export interface RefinarSpec {
   filtrar_por?: {
     columna: string;
     valor: string;
-    operador?: "igual" | "contiene" | "mayor_que" | "menor_que";
+    operador?: "igual" | "no_igual" | "contiene" | "no_contiene" | "mayor_que" | "no_mayor_que" | "menor_que" | "no_menor_que";
   };
   /** Add columns from available_properties to the display. */
   agregar_columnas?: string[];
@@ -605,20 +605,51 @@ function refinarTabla(
   spec: TablaSpec,
 ): QuantificationTable | undefined {
   let { rows, express_ids, columnas } = cache;
+  // Boss 2026-08-05 (R2.5 bug fix) — raw BIM rows carry flat keys
+  // like "Qto_WallBaseQuantities.GrossVolume" / "name", not the
+  // Spanish labels the LLM sends ("Volumen", "Nombre"). Resolve
+  // the label once so the filter + sort blocks read the right cell.
+  const cachedScalarKeys = getScalarTopLevelKeys(rows);
 
   // 1. Apply row filter.
   if (refinar.filtrar_por) {
     const { columna, valor, operador } = refinar.filtrar_por;
+    // Translate the LLM's Spanish label to the raw row's actual
+    // key (e.g. "Volumen" → "Qto_.*GrossVolume"). Falls back to the
+    // literal label if the column doesn't resolve (graceful —
+    // mirrors projectRowFull's "—" em-dash behavior).
+    const filterLookup = resolveColumnKey(columna, cachedScalarKeys) ?? columna;
     const indices: number[] = [];
     for (let i = 0; i < rows.length; i++) {
-      const cellRaw = rows[i][columna];
-      const v = String(cellRaw ?? "").toLowerCase();
+      const cellRaw = getPropertyByPath(rows[i], filterLookup);
+      // Mirror projectRowFull's name-strip behavior — drops the trailing
+      // ":digits" express-id fragment some BIM tools emit so the filter
+      // compares against the same projected name the user sees.
+      let cellStr = String(cellRaw ?? "");
+      if (filterLookup === "name") cellStr = cellStr.replace(/:[\d]+$/, "");
+      const v = cellStr.toLowerCase();
       const target = valor.toLowerCase();
-      let match: boolean;
-      if (operador === "contiene") match = v.includes(target);
-      else if (operador === "mayor_que") match = Number(v) > Number(target);
-      else if (operador === "menor_que") match = Number(v) < Number(target);
-      else match = v === target; // default "igual"
+      // Boss 2026-08-05 (R2.5 follow-up) — negation operators
+      // (`no_igual`, `no_contiene`, `no_mayor_que`, `no_menor_que`)
+      // invert the base match. Numeric operators skip non-numeric
+      // cells cleanly so `Number('foo') > Number('bar') → false
+      // → !false → true` doesn't silently include junk rows.
+      const safeOperador = operador ?? "igual";
+      const isNegation = safeOperador.startsWith("no_");
+      const baseOp = isNegation ? safeOperador.slice(3) : safeOperador;
+      let match = false;
+      if (baseOp === "contiene") match = v.includes(target);
+      else if (baseOp === "igual") match = v === target;
+      else if (baseOp === "mayor_que") {
+        const nv = Number(v);
+        const nt = Number(target);
+        match = Number.isFinite(nv) && Number.isFinite(nt) && nv > nt;
+      } else if (baseOp === "menor_que") {
+        const nv = Number(v);
+        const nt = Number(target);
+        match = Number.isFinite(nv) && Number.isFinite(nt) && nv < nt;
+      }
+      if (isNegation) match = !match;
       if (match) indices.push(i);
     }
     rows = indices.map((i) => rows[i]);
@@ -643,12 +674,15 @@ function refinarTabla(
   if (refinar.ordenar_por) {
     const { columna, direccion } = refinar.ordenar_por;
     const dir = direccion === "desc" ? -1 : 1;
+    // Same label translation as the filter block — without it the
+    // sort comparator reads the wrong property.
+    const sortLookup = resolveColumnKey(columna, cachedScalarKeys) ?? columna;
     const indexed = rows.map((r, i) => ({
       row: r,
       ids: express_ids[i] ?? [],
     }));
     indexed.sort(
-      (a, b) => compareRefinementCell(a.row[columna], b.row[columna]) * dir,
+      (a, b) => compareRefinementCell(a.row[sortLookup], b.row[sortLookup]) * dir,
     );
     rows = indexed.map((x) => x.row);
     express_ids = indexed.map((x) => x.ids);
@@ -894,7 +928,7 @@ export function buildTabla(
 
 export async function toolConsultarBaseDeConocimiento(
   args: ConsultarArgs,
-  _ctx: ToolContext,
+  ctx: ToolContext,
   signal?: AbortSignal,
 ): Promise<ConsultarResult> {
   const fuente = args.fuente ?? "auto";
@@ -923,6 +957,42 @@ export async function toolConsultarBaseDeConocimiento(
   const resolvedFuente: "modelo" | "especificacion" | "mapeos" =
     fuente === "auto" ? "modelo" : fuente;
   const tabla = args.tabla ? buildTabla(resolvedFuente, args.tabla) : undefined;
+  // Boss 2026-08-05 (R2.5 follow-up) — auto-mirror table → viewer.
+  // Every fresh and refined table mirrors to the 3D viewer so the
+  // JARVIS experience keeps table and model in sync, removing the
+  // old decoupled-bundle failure mode where the LLM had to remember
+  // a separate `resaltar_elementos` call. Empty refined set → reset
+  // the existing highlight (don't leave stale highlights on a
+  // refinement that empties the table).
+  if (tabla?.filas_express_ids) {
+    const allIds = tabla.filas_express_ids
+      .flat()
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    if (allIds.length > 0) {
+      const mirrorFilter: Filter = {
+        c: "OR",
+        g: allIds.map((id) => ({
+          c: "AND",
+          r: [{ p: "express_id", op: "equals", v: String(id) }],
+        })),
+      };
+      try {
+        ctx.resaltar({ filtro: mirrorFilter });
+      } catch (mirrorErr) {
+        // Best-effort — never fail the table call on a viewer-side
+        // issue.
+        // eslint-disable-next-line no-console
+        console.warn("table→viewer mirror failed", mirrorErr);
+      }
+    } else {
+      try {
+        ctx.resaltar({ reset: true });
+      } catch (mirrorErr) {
+        // eslint-disable-next-line no-console
+        console.warn("viewer reset on empty refinement failed", mirrorErr);
+      }
+    }
+  }
   // Boss 2026-07-30 18:13 — detect columns that have no data for the
   // requested class (e.g., "largo" for IfcWindow — length_m is null
   // in the extract). The agent uses these warnings to suggest

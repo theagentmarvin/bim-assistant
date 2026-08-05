@@ -42,6 +42,17 @@
       }
     },
     {
+      "id": "pre-prompt-refinement-negation",
+      "hook": "pre-prompt-augmentation",
+      "priority": 89,
+      "description": "Boss 2026-08-05 R2.5 — when the user expresses exclusion/removal intent (remueve, quita, excluye, filtra sin, sin las/los), inject a runtime hint so the LLM reaches for the prefix-no_ operators in refinar.filtrar_por instead of the positive igual/contiene defaults. Closes the failure where 'remueve las bisagras' silently collapsed to igual+value (zero rows) because no not-equal primitive existed.",
+      "rule": {
+        "trigger_pattern": "\\b(remueve|remueva|quita|quite|excluye|excluya|filtra\\s+sin|sin\\s+(las|los))\\b",
+        "augmentation_text": "[Regla runtime — refinamiento con negación detectado] Cuando el usuario pide quitar/excluir/filtrar sin X, usa refinar.filtrar_por con un operador con prefijo 'no_': no_igual, no_contiene, no_mayor_que, o no_menor_que. Default sigue siendo 'igual'. La tabla de cuantificación y el visor 3D se sincronizan automáticamente gracias al auto-mirror (Boss 2026-08-05 R2.5); NO necesitas llamar a resaltar_elementos por separado.",
+        "cooldown_turns": 1
+      }
+    },
+    {
       "id": "pre-prompt-class-filter-required",
       "hook": "pre-prompt-augmentation",
       "priority": 88,

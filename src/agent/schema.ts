@@ -106,8 +106,8 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
                     },
                     operador: {
                       type: "string",
-                      enum: ["igual", "contiene", "mayor_que", "menor_que"],
-                      description: "Operador de comparación. Default igual.",
+                      enum: ["igual", "no_igual", "contiene", "no_contiene", "mayor_que", "no_mayor_que", "menor_que", "no_menor_que"],
+                      description: "Operador de comparación. Default igual. Prefijo 'no_' invierte (no_igual = no exactamente igual, no_contiene = no incluye el substring, etc).",
                     },
                   },
                 },

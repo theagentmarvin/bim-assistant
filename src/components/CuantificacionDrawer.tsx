@@ -1,24 +1,21 @@
 // src/components/CuantificacionDrawer.tsx
 //
 // Bottom-anchored drawer under the 3D viewer. Two states:
-// closed (40px handle only) and open (40% viewport height with
-// the table). The handle is a click-to-toggle button — Boss
-// 2026-08-05 11:40 retired the height-adjust affordance (drag-to-
-// resize + full state + grip pill) because it kept racing with
-// click detection and the user only wants a binary toggle.
+// closed (40px handle) and open (40% viewport height with the
+// table). The handle is a true <button> — single click to toggle
+// open/closed.
 //
-// Parent owns the drawer state, persistence, auto-expand, and the
-// pulse trigger. This component owns the toggle handler, the
-// height math, and the body fade-in.
+// Parent owns the drawer state, auto-expand, and the pulse
+// trigger. This component owns the toggle handler, the height
+// math, and the body fade-in.
 //
-// Toggle trigger: onMouseDown + onKeyDown, NOT onClick. The
-// <button>'s native click event is canceled by Chrome when the
-// pointer moves more than ~5px between mousedown and mouseup —
-// and real human clicks have touchpad jitter larger than that.
-// The previous code (8a1bb8d → 592d5a3) used onMouseDown for
-// exactly this reason. The 11:40 refactor lost it; restored
-// here. Keyboard activation (Enter/Space) is handled via
-// onKeyDown so the button stays focusable.
+// Toggle trigger: onMouseDown + onKeyDown, NOT onClick. Chrome
+// cancels the click event when the pointer moves more than ~5px
+// between mousedown and mouseup — touchpad jitter exceeds this on
+// real human clicks. onMouseDown fires on press, before any
+// movement cancellation. onKeyDown handles Enter/Space; the
+// button's default click event is suppressed so the toggle fires
+// once.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import QuantificationPanel from "./QuantificationPanel";
@@ -93,14 +90,15 @@ export default function CuantificacionDrawer({
   };
 
   // Mouse handler — fires on press, before any mouse-movement
-  // cancellation. Ignores non-primary buttons (right-click, etc.).
+  // cancellation. Ignores non-primary buttons.
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     toggle();
   };
 
   // Keyboard handler — Enter/Space toggles. preventDefault stops
-  // the button's default click event from firing a second time.
+  // the button's default click event from firing alongside the
+  // toggle.
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();

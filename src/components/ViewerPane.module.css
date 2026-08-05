@@ -7,7 +7,12 @@
 .pane {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* The drawer is a sibling of this pane in the viewer column.
+   * `flex: 1 1 0; min-height: 0` lets the pane shrink to leave
+   * room for the drawer; `height: 100%` would force the pane to
+   * the full column and overflow the drawer. */
+  flex: 1 1 0;
+  min-height: 0;
   background: var(--ff-bg-canvas);
   position: relative;
 }

@@ -153,13 +153,10 @@ export default function App() {
   const [agentStatus, setAgentStatus] = useState<AgentStatusState>({ kind: "idle" });
   const indexerStartedRef = useRef(false);
 
-  // ----- Drawer state (stage 1) -----
-  // Boss 2026-08-05 11:40 — simplified to a binary toggle (closed
-  // | open). The handle is a click-to-toggle button; no
-  // height-adjust affordance. Start OPEN so the cuantificación
-  // panel is visible on app load. The user can collapse it
-  // manually via the same button; the agent's auto-expand effect
-  // below is unchanged and still fires when latestTable changes.
+  // ----- Drawer state -----
+  // Binary toggle (closed | open). Initial state is open so the
+  // cuantificación panel is visible on app load. The agent's auto-
+  // expand effect below fires when latestTable changes.
   const [drawerState, setDrawerState] = useState<DrawerState>("open");
 
   // Boss 2026-08-05 09:42 — spec column starts CLOSED. Independent

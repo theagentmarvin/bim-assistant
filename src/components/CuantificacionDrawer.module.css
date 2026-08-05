@@ -3,11 +3,9 @@
  * Drawer at the bottom of the 3D viewer column. Two states:
  * closed (40px handle) and open (40% viewport height with the
  * table). The handle is a true <button> — single click to toggle
- * open/closed. Boss 2026-08-05 11:40 retired the height-adjust
- * affordance (drag-to-resize + full state + grip pill) to kill
- * the click-vs-touchpad race.
+ * open/closed.
  *
- * See .claude/specs/task-drawer-redesign.md.
+ * See .claude/specs/task-drawer-redesign.md for the layout rationale.
  */
 
 .drawer {
@@ -53,13 +51,10 @@
   border-radius: 2px;
 }
 
-/* Boss 2026-08-05 10:38 — chevron icon that mirrors the spec
- * column's ‹ pattern. Default ‹ points left (the spec rail /
- * PdfViewer header use this). For the bottom-anchored drawer we
- * rotate it: 90° CW → points up = "expand up from closed";
- * −90° → points down = "collapse down from open". CSS transition
- * (200ms ease) on transform so the chevron flips smoothly when
- * the drawer state changes. */
+/* Chevron icon — same ‹ glyph used by the spec rail and PdfViewer
+ * header. For the bottom-anchored drawer we rotate it: 90° CW
+ * points up (= "expand up from closed"), −90° points down
+ * (= "collapse down from open"). */
 .handleChevron {
   display: inline-block;
   font-size: 16px;
@@ -136,16 +131,25 @@
   }
 }
 
-/* Body — visible when state is open. Opacity 0 by default so the
- * 80ms-delayed fade-in can animate in. */
+/* Body — opacity 0 by default so the 80ms-delayed fade-in can
+ * animate in. `pointer-events: none` while invisible: the 80ms
+ * window would otherwise allow clicks to land on an invisible
+ * div with no handler. Re-enabled once the body is actually
+ * visible. The pointer-events transition is delayed by 280ms so
+ * it flips at the end of the opacity fade, not the start. */
 .body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
   opacity: 0;
-  transition: opacity 200ms ease 80ms;
+  pointer-events: none;
+  transition: opacity 200ms ease 80ms,
+              pointer-events 0s linear 280ms;
 }
 
 .bodyVisible {
   opacity: 1;
+  pointer-events: auto;
+  transition: opacity 200ms ease 80ms,
+              pointer-events 0s linear 0s;
 }

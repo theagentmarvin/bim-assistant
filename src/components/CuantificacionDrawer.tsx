@@ -204,20 +204,16 @@ export default function CuantificacionDrawer({
     return `${total} fila${total === 1 ? "" : "s"}`;
   }, [data]);
 
-  // Boss 2026-08-05 10:05 — onHandleClick is a defensive fallback
-  // for any browser that does fire the click event. The real
-  // toggle path lives in onUp's isClickToExpand / isClickToCollapse
-  // branches because Chrome swallows the synthetic click event
-  // when the mousedown handler calls preventDefault on a div with
-  // touch-action: none. onStateChange is idempotent (calling it
-  // with the current state is a no-op) so a double-fire is safe.
-  const onHandleClick = () => {
-    if (state === "peek") {
-      onStateChange("expanded");
-    } else if (state === "expanded" || state === "full") {
-      onStateChange("peek");
-    }
-  };
+  // Boss 2026-08-05 10:18 — onHandleClick removed entirely. The
+  // previous version was a defensive fallback for browsers that
+  // DO fire the click event after our preventDefault() +
+  // touch-action: none combo, but it created a race: onUp
+  // would setDrawerState("expanded"), then the React re-render
+  // would hand the click handler a new closure with the new
+  // state, and onHandleClick would immediately toggle it back
+  // to "peek". Net result: drawer peek → expanded → peek, looks
+  // like nothing happened. The onUp path is the only click path
+  // now — reliable across every browser that fires mouseup.
 
   const animating = dragHeight === null;
 
@@ -234,14 +230,13 @@ export default function CuantificacionDrawer({
       <div
         className={styles.handle}
         onMouseDown={startDrag}
-        onClick={onHandleClick}
         role="separator"
         aria-label="Arrastrar para redimensionar el drawer; clic para expandir"
         aria-orientation="horizontal"
         aria-valuenow={Math.round(drawerHeight)}
         aria-valuemin={PEEK_HEIGHT}
         aria-valuemax={viewportHeight - FULL_MIN_FREE}
-        title="Arrastrar para ajustar alto · clic para expandir"
+        title="Arrastrar para ajustar alto"
       >
         <span className={styles.handleGrip} aria-hidden="true" />
         <div className={`${styles.handleBadge} ${pulse ? styles.handleBadgePulse : ""}`}>

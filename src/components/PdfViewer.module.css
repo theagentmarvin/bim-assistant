@@ -42,6 +42,40 @@
   text-overflow: ellipsis;
 }
 
+/* Boss 2026-08-05 09:42 — ‹ button in the PdfViewer header that
+ * collapses the spec column back to the 44px rail. Mirrors the
+ * SpecRail chevron visually (same glyph, same hover behaviour)
+ * so the two panels feel like siblings. */
+.collapseBtn {
+  background: transparent;
+  border: 1px solid var(--ff-border);
+  border-radius: var(--ff-radius-control);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ff-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  font-family: inherit;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.collapseBtn:hover {
+  background: var(--ff-bg-hover);
+  color: var(--ff-text-primary);
+  border-color: var(--ff-blue-active);
+}
+
+.collapseBtn:focus-visible {
+  outline: 2px solid var(--ff-blue-active);
+  outline-offset: 1px;
+}
+
 /* ----- Page navigation toolbar ----- */
 
 .toolbar {

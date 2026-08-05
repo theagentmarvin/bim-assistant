@@ -40,6 +40,10 @@ interface Props {
   onClickSection?: (sectionId: string) => void;
   /** Selected mapped section to highlight in the text layer. */
   selectedSectionId?: string | null;
+  /** Boss 2026-08-05 09:42 — when provided, the header renders a ‹
+   *  collapse button. Parent uses this to close the spec column back
+   *  to the 44px rail. Mirrors the SpecRail click-to-open pattern. */
+  onCollapse?: () => void;
 }
 
 // Fit-to-width: how much of the container width the canvas should
@@ -51,7 +55,7 @@ const PAGE_PADDING = 16;
 // don't create absurd backing-store sizes.
 const MAX_DPR = 2;
 
-export default function PdfViewer({ pdfUrl, currentPage, onPageChange, onClickSection, selectedSectionId }: Props) {
+export default function PdfViewer({ pdfUrl, currentPage, onPageChange, onClickSection, selectedSectionId, onCollapse }: Props) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [internalPage, setInternalPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -556,6 +560,17 @@ export default function PdfViewer({ pdfUrl, currentPage, onPageChange, onClickSe
         <span className={styles.headerFilename} title={pdfUrl}>
           {headerFilename}
         </span>
+        {onCollapse && (
+          <button
+            type="button"
+            className={styles.collapseBtn}
+            onClick={onCollapse}
+            aria-label="Cerrar especificación"
+            title="Cerrar especificación"
+          >
+            ‹
+          </button>
+        )}
       </div>
       <div className={styles.toolbar}>
         <button

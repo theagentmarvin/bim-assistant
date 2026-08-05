@@ -161,6 +161,13 @@ export default function App() {
   // survive a reload.
   const [drawerState, setDrawerState] = useState<DrawerState>("peek");
 
+  // Boss 2026-08-05 09:42 — spec column starts CLOSED. Independent
+  // of drawerState: the user clicks the SpecRail to open the spec
+  // column, and clicks the ‹ button in the PdfViewer header to
+  // close it. Both panels now have a click-to-open pattern that
+  // mirrors the cuantificación drawer's handle-click-to-expand.
+  const [specOpen, setSpecOpen] = useState<boolean>(false);
+
   // Latest structured table from the agent. When this changes, the
   // auto-expand effect below drives the drawer.
   const [latestTable, setLatestTable] = useState<QuantificationTable | null>(null);
@@ -193,12 +200,14 @@ export default function App() {
     }
   }, [latestTable]);
 
-  // Rail click → spec column opens, drawer collapses to peek.
-  // We flip the anti-intrusion flag so the next agent response also
-  // respects the manual collapse.
-  const handleRailClick = useCallback(() => {
-    setDrawerState("peek");
-    userHasCollapsedThisTurnRef.current = true;
+  // Rail click → spec column opens. The cuantificación drawer is
+  // untouched — both panels are now independent.
+  const handleSpecOpen = useCallback(() => {
+    setSpecOpen(true);
+  }, []);
+
+  const handleSpecCollapse = useCallback(() => {
+    setSpecOpen(false);
   }, []);
 
   // ----- Lookups -----
@@ -429,6 +438,7 @@ export default function App() {
     setPdfSectionId(null);
     setLatestTable(null);
     setDrawerState("peek");
+    setSpecOpen(false);
     userHasCollapsedThisTurnRef.current = false;
   }, []);
 
@@ -519,10 +529,10 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  // Spec column width: pdfSlotWidth when the drawer is at peek,
-  // 44px rail otherwise. The CSS transition on the column
-  // (transition: width 240ms ease-out) animates the change.
-  const specColumnWidthPx = drawerState === "peek" ? pdfSlotWidth : SPEC_RAIL_WIDTH;
+  // Spec column width: pdfSlotWidth when specOpen, 44px rail
+  // otherwise. Boss 2026-08-05 09:42 — decoupled from drawerState;
+  // both panels are independently opened/closed.
+  const specColumnWidthPx = specOpen ? pdfSlotWidth : SPEC_RAIL_WIDTH;
 
   return (
     <div className={styles.shell}>
@@ -558,9 +568,9 @@ export default function App() {
         <section
           className={styles.specColumn}
           style={{ width: `${specColumnWidthPx}px` }}
-          data-state={drawerState}
+          data-state={specOpen ? "open" : "closed"}
         >
-          {drawerState === "peek" ? (
+          {specOpen ? (
             <>
               <PdfViewer
                 pdfUrl="/eett-c.pdf"
@@ -572,6 +582,7 @@ export default function App() {
                   setPdfPage(page);
                 }}
                 selectedSectionId={pdfSectionId}
+                onCollapse={handleSpecCollapse}
               />
               <div
                 className={styles.splitter}
@@ -583,7 +594,7 @@ export default function App() {
               />
             </>
           ) : (
-            <SpecRail fileName="eett-c.pdf" onClick={handleRailClick} />
+            <SpecRail fileName="eett-c.pdf" onClick={handleSpecOpen} />
           )}
         </section>
         <section className={styles.viewerColumn}>

@@ -13,11 +13,16 @@
 import { EMBEDDING_DIM } from "./llm";
 
 const DB_NAME = "bim-assistant";
-const DB_VERSION = 1;
+// Boss 2026-08-05 — bumped 1 → 2 to add the `agent-turns` store used
+// by the pilot feedback loop. v1 IndexedDB existing stores are
+// preserved verbatim; the upgrade callback only creates the new
+// store when missing, so existing users' RAG caches survive.
+const DB_VERSION = 2;
 
 const STORE_CHUNKS = "chunks";
 const STORE_EMBEDDINGS = "embeddings";
 const STORE_META = "meta";
+const STORE_TURNS = "agent-turns";
 
 export interface ChunkRecord {
   id: string;
@@ -36,6 +41,34 @@ export interface MetaRecord {
   value: unknown;
 }
 
+/**
+ * Boss 2026-08-05 — Pilot feedback loop. One record per `handleSend`
+ * invocation: the user message, every tool call, every tool result,
+ * and the agent's final answer. Schema is intentionally loose — we
+ * mirror the ChatPanel ChatMessage shape so a turn re-rendered to
+ * the UI looks identical. Indexed by `turn_id` (uuid-like). The
+ * `session_id` field groups turns between resets; exporters walk
+ * `getAllTurns()` and sort by turn_index to render a markdown file.
+ */
+export interface ChatMessageShape {
+  id: string;
+  role: "user" | "agent" | "tool" | "error";
+  text?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+  toolResult?: { ok: boolean; summary: string };
+  error?: string;
+}
+
+export interface TurnRecord {
+  turn_id: string;
+  session_id: string;
+  turn_index: number;
+  created_at: string;
+  duration_ms?: number;
+  messages: ChatMessageShape[];
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
@@ -52,6 +85,14 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META, { keyPath: "key" });
+      }
+      // Boss 2026-08-05 — agent-turns store added in DB v2.
+      // Keyed by `turn_id` (caller-generated uuid). Index on
+      // session_id + turn_index would let us fast-path per-session
+      // queries for export, but with <1000 turns typical for a
+      // 10-day pilot, full-table scan + in-memory sort is fine.
+      if (!db.objectStoreNames.contains(STORE_TURNS)) {
+        db.createObjectStore(STORE_TURNS, { keyPath: "turn_id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -165,4 +206,36 @@ export async function indexStats(): Promise<{
     embeddings: allEmbs.length,
     expectedDim: EMBEDDING_DIM,
   };
+}
+
+// ----- agent-turns store (Boss 2026-08-05, pilot feedback loop) -----
+
+/** Append one turn. No-op if `turn.messages` is empty. */
+export async function putTurn(turn: TurnRecord): Promise<void> {
+  if (!turn.messages || turn.messages.length === 0) return;
+  const db = await openDb();
+  const t = tx(db, STORE_TURNS, "readwrite");
+  t.objectStore(STORE_TURNS).put(turn);
+  await awaitTx(t);
+}
+
+/** Read all turns. Returned in insertion order (newest first when
+ *  the caller reverses). Sort by `turn_index` ascending for export. */
+export async function getAllTurns(): Promise<TurnRecord[]> {
+  const db = await openDb();
+  return new Promise<TurnRecord[]>((resolve, reject) => {
+    const t = tx(db, STORE_TURNS, "readonly");
+    const req = t.objectStore(STORE_TURNS).getAll();
+    req.onsuccess = () => resolve((req.result ?? []) as TurnRecord[]);
+    req.onerror = () =>
+      reject(req.error ?? new Error("IDB getAllTurns failed"));
+  });
+}
+
+/** Clear all turns. Used by the test suite + by Reset. */
+export async function clearTurns(): Promise<void> {
+  const db = await openDb();
+  const t = tx(db, STORE_TURNS, "readwrite");
+  t.objectStore(STORE_TURNS).clear();
+  await awaitTx(t);
 }

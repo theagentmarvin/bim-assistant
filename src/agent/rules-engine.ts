@@ -93,6 +93,20 @@ function loadRules(): QuestionRule[] {
   return list;
 }
 
+// Boss 2026-08-05 — Vite HMR hook for the rules cache. Without this,
+// a JSON save would re-evaluate the static `import rulesRaw from ...`
+// above (Vite bumps the module hash), but `loadRules()` would still
+// return the cached `cachedRules` array from before the save because
+// that array lives on this module's scope — which the JSON edit
+// doesn't bust. The HMR accept hook below tells Vite to call
+// `resetRulesCache()` on every module hot-update so the next hook
+// invocation re-reads. Cheap, scoped, transparent.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    resetRulesCache();
+  });
+}
+
 /**
  * Boss 2026-08-05 — Vite HMR reload hook. After a JSON save, the
  * static import is rebuilt and we drop our cache so the next

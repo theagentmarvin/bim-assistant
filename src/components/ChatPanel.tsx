@@ -42,6 +42,12 @@ interface Props {
   // before R3. Click flow unchanged — both forms are displayed, not
   // auto-submitted.
   contextualPrompts?: string[];
+  // Boss 2026-08-05 (pilot feedback loop) — Export session as a
+  // markdown file. The parent reads the IndexedDB agent-turns store
+  // and triggers a browser download. We don't take the turns as a
+  // prop because the chat UI doesn't own persistence — App does.
+  // Disabled when `messages` is empty (no transcript to export).
+  onExport?: () => void;
 }
 
 // Fallback suggested prompts shown when App hasn't supplied any.
@@ -60,6 +66,7 @@ export default function ChatPanel({
   onSend,
   onReset,
   contextualPrompts = [],
+  onExport,
 }: Props) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -100,14 +107,25 @@ export default function ChatPanel({
           <span className={styles.brand}>Salfa BIM Agent 01</span>
           <span className={styles.subtitle}>Asistente BIM</span>
         </div>
-        <button
-          type="button"
-          className={styles.resetBtn}
-          onClick={onReset}
-          title="Limpiar chat, resaltado y navegación del PDF"
-        >
-          ⟳ Limpiar
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.exportBtn}
+            onClick={onExport}
+            disabled={!onExport || messages.length === 0 || busy}
+            title="Descargar la conversación como archivo .md para reportar errores al equipo"
+          >
+            ↗ Exportar
+          </button>
+          <button
+            type="button"
+            className={styles.resetBtn}
+            onClick={onReset}
+            title="Limpiar chat, resaltado y navegación del PDF"
+          >
+            ⟳ Limpiar
+          </button>
+        </div>
       </div>
       <div className={styles.list} ref={listRef}>
         {(() => {

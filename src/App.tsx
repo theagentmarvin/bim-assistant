@@ -42,6 +42,21 @@ import {
   buildTableContextPreamble,
   clearTablaRefinementCache,
 } from "./agent/tools";
+import { getAllTurns, putTurn, type TurnRecord } from "./data/storage";
+import { exportSession } from "./utils/exportChat";
+
+// Boss 2026-08-05 (pilot feedback loop). Generate uuid-shaped ids
+// for IndexedDB records without dragging in a uuid lib for what is
+// essentially a 6-line helper. crypto.randomUUID is available on
+// modern browsers + Node ≥19 (the vitest runner). Fallback uses
+// Date.now + Math.random — same collision profile as Math.random
+// alone, acceptable for a single-pilot-session corpus of <1000 turns.
+function createTurnId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 import {
   indexAll,
   forceReindex,
@@ -164,6 +179,13 @@ export default function App() {
     messageIdCounterRef.current += 1;
     return `m-${messageIdCounterRef.current}`;
   }, []);
+  // Boss 2026-08-05 (pilot feedback loop). sessionId rotates on
+  // Reset so an exported session reads cleanly between two resets.
+  // turnIndex is globally monotonic so the markdown export sorts
+  // turns in chronological order across the whole app lifetime.
+  // Both refs are write-only — UI never reads them.
+  const sessionIdRef = useRef<string>(createTurnId());
+  const turnIndexRef = useRef(0);
 
   // ----- Agent status (indexer) -----
   const [agentStatus, setAgentStatus] = useState<AgentStatusState>({ kind: "idle" });
@@ -420,11 +442,53 @@ export default function App() {
     // for the upcoming response should trigger normally unless the user
     // collapses the drawer again during this turn.
     userHasCollapsedThisTurnRef.current = false;
+    const turnStart = Date.now();
+    const sessionId = sessionIdRef.current;
 
     const userMsg: ChatMessage = { id: newMessageId(), role: "user", text };
+    // Boss 2026-08-05 (pilot feedback loop) — local snapshot of
+    // the turn's messages, mirrored in parallel with React state.
+    // The export utility walks IndexedDB on click; this array
+    // becomes the `messages` field of the TurnRecord we write to
+    // the agent-turns store at the end of handleSend.
+    const turnMessages: ChatMessage[] = [userMsg];
+    const pushMessage = (msg: ChatMessage) => {
+      turnMessages.push(msg);
+      setMessages((m) => [...m, msg]);
+    };
+    // Replicates the same "find the most recent matching tool
+    // bubble and patch it" logic that the React-state setMessages
+    // call did before, but updates both the local snapshot and the
+    // UI state. Keeps the two views consistent without depending
+    // on React render timing.
+    const patchLastTool = (
+      name: string,
+      ok: boolean,
+      summary: string,
+    ) => {
+      const tIdx = turnMessages.findLastIndex(
+        (m) => m.role === "tool" && m.toolName === name && !m.toolResult,
+      );
+      if (tIdx !== -1) {
+        turnMessages[tIdx] = {
+          ...turnMessages[tIdx],
+          toolResult: { ok, summary },
+        };
+      }
+      setMessages((m) => {
+        const idx = [...m].reverse().findIndex(
+          (mm) => mm.role === "tool" && mm.toolName === name && !mm.toolResult,
+        );
+        if (idx === -1) return m;
+        const realIdx = m.length - 1 - idx;
+        const copy = [...m];
+        const target = copy[realIdx];
+        copy[realIdx] = { ...target, toolResult: { ok, summary } };
+        return copy;
+      });
+    };
     setMessages((m) => [...m, userMsg]);
     setBusy(true);
-    const append = (msg: ChatMessage) => setMessages((m) => [...m, msg]);
     // Boss 2026-08-05 R1 — inject a table-state preamble so the agent
     // can answer follow-up questions without rebuilding the table
     // from scratch. Latest table + selected IFC class come from
@@ -438,23 +502,13 @@ export default function App() {
     try {
       const finalText = await runAgentLoop(text, toolContext, {
         onToolCallStart: (name, args) => {
-          append({ id: newMessageId(), role: "tool", toolName: name, toolArgs: args });
+          pushMessage({ id: newMessageId(), role: "tool", toolName: name, toolArgs: args } as ChatMessage);
         },
         onToolCallEnd: (name, result) => {
-          setMessages((m) => {
-            const idx = [...m].reverse().findIndex(
-              (mm) => mm.role === "tool" && mm.toolName === name && !mm.toolResult,
-            );
-            if (idx === -1) return m;
-            const realIdx = m.length - 1 - idx;
-            const copy = [...m];
-            const target = copy[realIdx];
-            const summary = result.ok
-              ? summarizeToolResult(name, result.result)
-              : `Error: ${result.error}`;
-            copy[realIdx] = { ...target, toolResult: { ok: result.ok, summary } };
-            return copy;
-          });
+          const summary = result.ok
+            ? summarizeToolResult(name, result.result)
+            : `Error: ${result.error}`;
+          patchLastTool(name, result.ok, summary);
           // Lift the structured `tabla` payload into the drawer state.
           // The auto-expand effect (driven by latestTable) handles the
           // drawer transition with anti-intrusion.
@@ -500,10 +554,10 @@ export default function App() {
           }
         },
         onFinalAnswer: (text) => {
-          append({ id: newMessageId(), role: "agent", text });
+          pushMessage({ id: newMessageId(), role: "agent", text } as ChatMessage);
         },
         onError: (message) => {
-          append({ id: newMessageId(), role: "error", error: message });
+          pushMessage({ id: newMessageId(), role: "error", error: message } as ChatMessage);
         },
       },
         undefined, // signal — chat path doesn't pass AbortSignal today
@@ -512,18 +566,36 @@ export default function App() {
       setMessages((m) => {
         const last = m[m.length - 1];
         if (last?.role === "agent" && last.text === finalText) return m;
-        return [...m, { id: newMessageId(), role: "agent", text: finalText }];
+        const final: ChatMessage = { id: newMessageId(), role: "agent", text: finalText };
+        turnMessages.push(final);
+        return [...m, final];
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setMessages((m) => [
-        ...m,
-        { id: newMessageId(), role: "error", error: message },
-      ]);
+      pushMessage({ id: newMessageId(), role: "error", error: message } as ChatMessage);
     } finally {
       setBusy(false);
+      // Boss 2026-08-05 (pilot feedback loop). Persist this turn to
+      // IndexedDB so the "↗ Exportar" button can dump the full
+      // transcript later. Fire-and-forget — a putTurn failure
+      // shouldn't surface in the chat. The agent-turns corpus is
+      // the dev team's prompt-refinement input; if it's missing
+      // we lose signal but the app still works.
+      if (turnMessages.length > 0) {
+        const turn: TurnRecord = {
+          turn_id: createTurnId(),
+          session_id: sessionId,
+          turn_index: turnIndexRef.current++,
+          created_at: new Date(turnStart).toISOString(),
+          duration_ms: Date.now() - turnStart,
+          messages: [...turnMessages],
+        };
+        putTurn(turn).catch((err) => {
+          console.warn("[turn-log] putTurn failed:", err);
+        });
+      }
     }
-  }, [toolContext, newMessageId]);
+  }, [toolContext, newMessageId, latestTable, agentIfcClass, mappings, buildMappingFilter]);
 
   // Boss 2026-08-05 19:40 — Properties Panel toggle for the
   // viewer tools toolbar (under the NavCube). Click flips the
@@ -559,6 +631,27 @@ export default function App() {
     // PropertiesOverlay visibility to its default (on).
     setPropertiesVisible(true);
     userHasCollapsedThisTurnRef.current = false;
+    // Boss 2026-08-05 (pilot feedback loop) — rotate the session
+    // id so the next "↗ Exportar" click exports only the turns
+    // that happen AFTER this reset, not everything from app load.
+    sessionIdRef.current = createTurnId();
+  }, []);
+
+  // Boss 2026-08-05 (pilot feedback loop) — Export session button.
+  // Reads the IndexedDB agent-turns store, hands the turns to the
+  // pure formatter in src/utils/exportChat.ts, and triggers the
+  // browser download. Failure here is silent — the most likely
+  // cause is a malformed Blob on legacy browsers; the chat still
+  // works on the next click.
+  const handleExport = useCallback(() => {
+    void (async () => {
+      try {
+        const turns = await getAllTurns();
+        exportSession(turns, null);
+      } catch (err) {
+        console.warn("[export] session export failed:", err);
+      }
+    })();
   }, []);
 
   // Boss 2026-08-05 R3 — contextual suggested prompts. Registry is
@@ -701,6 +794,7 @@ export default function App() {
             busy={busy}
             onSend={handleSend}
             onReset={handleReset}
+            onExport={handleExport}
             contextualPrompts={contextualPrompts}
           />
         </aside>

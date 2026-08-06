@@ -215,3 +215,47 @@ Lesson: don't trust the OBC surface names without `grep`-ing the actual `@thatop
 ## 11. How to keep this doc fresh
 
 When you ship a new feature or change something load-bearing (model, auth, deployment, architecture), update AGENTS.md in the same commit. This is the first thing the next session reads.
+
+## 12. Pilot feedback loop infrastructure (added 2026-08-05)
+
+When the agent is sent to external testers (Boss's plan: 4 users, 2 managers + 2 BIM, ~10-day window), four pieces of infra back the "preferences in, refinement out" loop. **Read this section before debugging any pilot-related issue.**
+
+### 12a. agent-turns IndexedDB store (DB v2)
+
+- `src/data/storage.ts` exports `TurnRecord`, `putTurn`, `getAllTurns`, `clearTurns`. Keyed by `turn_id` (uuid).
+- Every `handleSend` writes one record at completion (the `finally` block). The record carries user msg + tool calls + tool results + final answer.
+- Survives reloads — this is the dev team's prompt-refinement corpus even if no tester ever clicks Export.
+- `session_id` rotates on Reset; `turn_index` is globally monotonic across the app lifetime. Exports sort by `turn_index`.
+
+### 12b. Session export (markdown transcript)
+
+- `src/utils/exportChat.ts` — pure `formatSessionMarkdown()` + DOM-only `downloadMarkdown()` + one-shot `exportSession(turns, tester)`.
+- "↗ Exportar" button on ChatPanel header, next to "⟳ Limpiar". Disabled when chat is empty.
+- Filename: `salfa-bim-session-YYYY-MM-DD-HHMM.md`.
+- Trailing "📝 Resumen para reportar" footer with 3 fill-in fields (qué funcionó bien / qué salió mal / sugerencias) — same template every tester fills, reports become comparable.
+- The `formatting-append-stats-footer` rule in `data/question-rules.json` appends a project-stats footer to every agent reply. The export formatter **strips** it via `FOOTER_REGEX` — otherwise 30 turns = 30 copies of the same line.
+
+### 12c. Rules-engine HMR hook
+
+- `src/agent/rules-engine.ts` line ~52 has `import.meta.hot.accept(() => resetRulesCache())`.
+- Without it, JSON edits in `data/question-rules.json` would re-evaluate the static `import rulesRaw` (Vite bumps the module hash) but `loadRules()` would still return the cached array. Now JSON edits take effect on save without a manual reload.
+- Verify the hook is firing: edit a rule's text, save, send a matching message — the new rule should fire. If not, the hook is broken; check the hot-update console.
+
+### 12d. Regression tripwires on prompt + tool surface
+
+- `src/agent/regression.test.ts` (7 tests, ~21ms) — substring tripwires on `JARVIS_SYSTEM_PROMPT`. Lose any of the 5 load-bearing substrings (identity line, Spanish rule, three tool names, clase_ifc rule, top-level constraint) and the test fails. Plus 2 surface-shape tests on `TOOL_SCHEMAS` (locked at 3 Spanish-named tools).
+- `src/utils/exportChat.test.ts` (8 tests, ~101ms) — formatter behavior (footer strip, role headers, sort order by `turn_index`, error message rendering, empty-session placeholder).
+- Run via `npm run test -- --run` — ~3s total. Add new tripwires here whenever Boss flags a new failure mode in the pilot.
+
+### 12e. How to iterate prompts from feedback
+
+1. Tester pastes `salfa-bim-session-*.md` to the feedback thread.
+2. Boss or Architect reads it, categorizes: bug / prompt gap / feature gap / UX confusion.
+3. **Prompt gap** → edit `src/agent/prompts.ts` `JARVIS_SYSTEM_PROMPT` in one commit. The regression tripwires (§12d) catch accidental substring drops automatically.
+4. **Rule gap** → edit `data/question-rules.json` in one commit. Vite HMR picks up the change automatically (per §12c).
+5. **Hallucinated number** → already covered by the prose-injection guardrail (`loop.ts` `proseGuard` for `totales`) + the `hallucination-guard-numeric-totales` rule. If a numeric hallucination still slips through, add a tripwire to the corresponding prompt section.
+
+### 12f. Locked PoC constraint reminder (still applies)
+
+- Spanish-only · single IFC + single PDF · no auth/deploy · no cost/clash/spatial · 3-tool surface · no OCR · no bilingual.
+- The export format is Spanish (user/agent/tool/error role labels) — don't accidentally translate.

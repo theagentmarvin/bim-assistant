@@ -19,6 +19,13 @@ import { geminiComplete, type GeminiContent } from "../data/llm";
 import { TOOL_SCHEMAS } from "./schema";
 import { JARVIS_SYSTEM_PROMPT } from "./prompts";
 import { runTool, type ToolContext, type ToolResult } from "./tools";
+import {
+  applyFormattingTemplate,
+  applyHallucinationGuard,
+  applyPostToolValidator,
+  collectPrePromptAugmentations,
+  runIntentClassifier,
+} from "./rules-engine";
 import type { OperacionCalculo, TotalesSpec } from "../quantification/types";
 
 const MAX_TURNS = 6; // bumped 4→6 because RAG-before-filter (consultar_base_de_conocimiento → resaltar_elementos) consumes 2 turns
@@ -45,7 +52,7 @@ function formatTotalesForProse(t: TotalesSpec): string {
 
 // The tool result union doesn't expose `tabla` on every variant —
 // we narrow with a typed cast after the tool-name check.
-type ConsultarResultWithTotales = { tabla?: { totales?: TotalesSpec } };
+type ConsultarResultWithTotales = { tabla?: { totales?: TotalesSpec[] } };
 
 export interface AgentCallbacks {
   onToolCallStart?: (name: string, args: Record<string, unknown>) => void;
@@ -59,13 +66,44 @@ export async function runAgentLoop(
   ctx: ToolContext,
   callbacks: AgentCallbacks = {},
   signal?: AbortSignal,
+  // Boss 2026-08-05 R1 — table-state preamble injected as a
+  // user-role part before the user's actual message. Null/undefined
+  // skips the injection (default). Built by
+  // buildTableContextPreamble() in tools.ts; carried through
+  // App.tsx → handleSend.
+  tableContext?: string,
 ): Promise<string> {
-  const contents: GeminiContent[] = [
-    {
-      role: "user",
-      parts: [{ text: userMessage }],
-    },
-  ];
+  // Boss 2026-08-05 (Extensibility — Hook 4: intent-classifier).
+  // Short-circuit greetings, thanks, capability queries, and
+  // goodbyes with canned responses. Saves the API spend on the
+  // prompt + a model turn. Formatting-template may still apply if
+  // its rule doesn't set skip_when_short_circuit; hallucination-
+  // guard self-skips (it requires tool data to cross-check).
+  const intent = runIntentClassifier(userMessage);
+  if (intent) {
+    const finalText = applyFormattingTemplate(intent.canned_response, {
+      shortCircuited: true,
+    });
+    callbacks.onFinalAnswer?.(finalText);
+    return finalText;
+  }
+  // Boss 2026-08-05 (Extensibility — Hook 1: pre-prompt-augmentation).
+  // Augmentations run after the intent-classifier short-circuit and
+  // before the R1 table-state preamble. The LLM sees policy hints
+  // first, then state, then the user's actual question.
+  const augmentations = collectPrePromptAugmentations(userMessage);
+  // Track every tool result this turn so Hook 3 (hallucination-guard)
+  // can cross-check the final prose against tool-reported totales.
+  const toolResults: Array<{ tool: string; result: unknown }> = [];
+  const userParts: GeminiContent["parts"] = [];
+  for (const aug of augmentations) {
+    userParts.push({ text: aug });
+  }
+  if (tableContext) {
+    userParts.push({ text: tableContext });
+  }
+  userParts.push({ text: userMessage });
+  const contents: GeminiContent[] = [{ role: "user", parts: userParts }];
   let finalText = "";
   for (let turn = 0; turn < MAX_TURNS; turn += 1) {
     if (signal?.aborted) throw new Error("Cancelado por el usuario.");
@@ -107,8 +145,24 @@ export async function runAgentLoop(
         throw new Error(msg);
       }
       finalText = text;
-      callbacks.onFinalAnswer?.(text);
-      return text;
+      // Boss 2026-08-05 (Extensibility — Hook 3 + Hook 5): cross-check
+      // the final prose against tool-reported totals, then apply the
+      // formatting template. Both hooks are pure — same input → same
+      // output when no rule fires. shortCircuited is false here; we
+      // reached the LLM's natural final answer path.
+      const guarded = applyHallucinationGuard(finalText, {
+        toolResults,
+        shortCircuited: false,
+      });
+      const guardedFinal =
+        guarded.warnings.length > 0
+          ? guarded.text + "\n\n" + guarded.warnings.join("\n")
+          : guarded.text;
+      finalText = applyFormattingTemplate(guardedFinal, {
+        shortCircuited: false,
+      });
+      callbacks.onFinalAnswer?.(finalText);
+      return finalText;
     }
     // Execute each function call, then append function-response parts.
     const responseParts: GeminiContent["parts"] = [];
@@ -123,19 +177,33 @@ export async function runAgentLoop(
       const result = await runTool(fc.name, fc.args, ctx, signal);
       callbacks.onToolCallEnd?.(fc.name, result);
       // Serialize the tool result for Gemini's function-response shape.
-      const payload = result.ok
+      let payload: Record<string, unknown> = result.ok
         ? { ok: true, ...result.result }
         : { ok: false, error: result.error };
+      // Boss 2026-08-05 (Extensibility — Hook 2: post-tool-call-validator).
+      // Pure — returns a new payload object if any rule fires;
+      // otherwise the original is returned untouched. Warnings
+      // appended via the `warnings` field, which the LLM sees as
+      // part of the tool's function-response on its next turn.
+      payload = applyPostToolValidator(fc.name, payload);
       responseParts.push({
         functionResponse: { name: fc.name, response: payload },
+      });
+      toolResults.push({
+        tool: fc.name,
+        result: result.ok ? result.result : null,
       });
       if (
         result.ok &&
         fc.name === "consultar_base_de_conocimiento" &&
-        (result.result as ConsultarResultWithTotales | undefined)?.tabla?.totales
+        (result.result as ConsultarResultWithTotales | undefined)?.tabla?.totales?.length
       ) {
-        const totales = (result.result as { tabla: { totales: TotalesSpec } }).tabla.totales;
-        proseGuard = formatTotalesForProse(totales);
+        // Boss 2026-08-05 (fix #B1.b) — `totales` is now an array.
+        // Each element gets its own prose guard line so the LLM
+        // reports every aggregate exactly (Area + Largo + Alto in
+        // one tool call → three guard lines in the next turn).
+        const totales = (result.result as { tabla: { totales: TotalesSpec[] } }).tabla.totales;
+        proseGuard = totales.map(formatTotalesForProse).join("\n");
       }
     }
     // Gemini v1beta (gemini-flash-latest and newer) accepts function
@@ -187,6 +255,21 @@ export async function runAgentLoop(
       .join("")
       .trim();
     finalText = text || "Lo siento, no pude generar una respuesta.";
+    // Boss 2026-08-05 — Hook 3 + Hook 5 also applied on the
+    // force-synthesis path (after MAX_TURNS). Same code as the
+    // natural final-answer path above; kept inline to avoid an
+    // extra closure inside the for-loop.
+    const guarded = applyHallucinationGuard(finalText, {
+      toolResults,
+      shortCircuited: false,
+    });
+    const guardedFinal =
+      guarded.warnings.length > 0
+        ? guarded.text + "\n\n" + guarded.warnings.join("\n")
+        : guarded.text;
+    finalText = applyFormattingTemplate(guardedFinal, {
+      shortCircuited: false,
+    });
     callbacks.onFinalAnswer?.(finalText);
   }
   return finalText;

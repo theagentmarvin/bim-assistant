@@ -65,10 +65,17 @@ export interface QuantificationTable {
   /** ISO 8601 timestamp the table was generated. */
   generadaEn: string;
   /**
-   * Boss 2026-08-03 (calcular_cantidades) — aggregate value when the
-   * agent asked for a calculation. Powers the agent's prose response
-   * and the TOTAL row at the bottom of the Cuantificación tab.
+   * Boss 2026-08-03 (calcular_cantidades) — aggregate values when the
+   * agent asked for one or more calculations. Powers the agent's
+   * prose response and the TOTAL rows at the bottom of the
+   * Cuantificación tab (one TOTAL row per operation).
    * Undefined when no `calcular` was requested.
+   *
+   * 2026-08-05 (fix #B1.b) — promoted from `TotalesSpec` to
+   * `TotalesSpec[]` so a single tool call can emit totals for
+   * multiple columns (e.g. sum Area + sum Largo + sum Alto).
+   * QuantificationPanel already handled multiple TOTAL rows —
+   * the change is purely the production-code surface.
    */
-  totales?: TotalesSpec;
+  totales?: TotalesSpec[];
 }

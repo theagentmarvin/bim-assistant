@@ -47,27 +47,22 @@
 }
 
 .header {
+  /* Boss 2026-08-05 (fix #B5) — title + meta rows removed per Boss
+   * feedback ("no agregan valor"). Header is now just the toolbar
+   * row, single flex container. */
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px 8px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--ff-border);
   background: var(--ff-bg-panel);
   flex-shrink: 0;
-}
-
-.headerInfo {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: 6px;
 }
 
 .clearBtn {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,36 +70,23 @@
   border: 1px solid var(--ff-border);
   border-radius: 50%;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1;
-  color: var(--ff-text-primary);
+  color: var(--ff-text-secondary);
   font-family: inherit;
   padding: 0;
-  transition: background 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
 .clearBtn:hover {
   background: var(--ff-bg-hover);
   border-color: var(--ff-text-secondary);
+  color: var(--ff-text-primary);
 }
 
 .clearBtn:focus-visible {
   outline: 2px solid var(--ff-blue-active);
   outline-offset: -2px;
-}
-
-.title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ff-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.meta {
-  font-size: 11px;
-  color: var(--ff-text-secondary);
 }
 
 .tableWrap {
@@ -324,13 +306,14 @@
 }
 
 .toolbar {
-  flex-shrink: 0;
+  /* Boss 2026-08-05 (fix #B5) — toolbar is now the only row inside
+   * the header. Stretch to fill horizontal space; clearBtn sits at
+   * the end. */
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--ff-border);
-  background: var(--ff-bg-panel);
+  gap: 6px;
+  min-width: 0;
 }
 
 .toolbarBtn {
@@ -349,7 +332,12 @@
 }
 
 .search {
-  flex: 1 1 auto;
+  /* Boss 2026-08-05 (fix #B6) — search bar must NOT stretch to the
+   * right edge of the header (Boss: "que no se extienda al extremo").
+   * Capped at 240px so the toolbar has breathing room between the
+   * search and the clear (×) button. Can still shrink on narrow
+   * panels via `flex-shrink: 1`. */
+  flex: 0 1 240px;
   min-width: 80px;
   height: 24px;
   padding: 0 8px;

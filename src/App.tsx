@@ -2,22 +2,27 @@
 //
 // Chat-first split-view (3 columns):
 //   - Left rail: ChatPanel (primary surface)
-//   - Center column: Spec PDF (or 44px rail when the cuantificación
-//     drawer leaves peek)
-//   - Right column: ViewerPane + CuantificaciónDrawer (the drawer
-//     slides up from the bottom of the viewer; the viewer shrinks
-//     to compensate)
+//   - Center column: MappedSidebar + PdfViewer (or 44px SpecRail
+//     when closed)
+//   - Right column: ViewerPane + CuantificaciónDrawer
 //
-// Stage 1 of the drawer redesign (see
-// .claude/specs/task-drawer-redesign.md). The properties column
-// was removed from the grid; the ModelPropertyPanel returns as a
-// floating overlay in stage 2. setSelectedElement still fires on
-// row click so the stage-2 hookup is straightforward.
+// Stage 1 (2026-08-05): MappedSidebar integrated from bim-specs-mapper.
+// Agent-driven sidebar filtering + precise filter-expression viewer
+// highlight wired in.
+//
+// UI change (Boss 2026-08-05 19:20): AgentStatus moved from a
+// dedicated row below the header into a compact trigger inside
+// the header (HeaderStatus), opening a popover for the Reindexar
+// action. Reset View button stripped from ViewerPane and re-homed
+// as a floating button under the NavCube inside Viewer3D. The
+// ViewerPane "Sin sección seleccionada" toolbar label is gone
+// with the rest of the toolbar.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ViewerPane from "./components/ViewerPane";
 import PdfViewer from "./components/PdfViewer";
-import AgentStatus, { type AgentStatusState } from "./components/AgentStatus";
+import HeaderStatus from "./components/HeaderStatus";
+import { type AgentStatusState } from "./components/AgentStatus";
 import ChatPanel, {
   type ChatMessage,
   summarizeToolResult,
@@ -25,9 +30,33 @@ import ChatPanel, {
 import CuantificacionDrawer, { type DrawerState } from "./components/CuantificacionDrawer";
 import PropertiesOverlay from "./components/PropertiesOverlay";
 import SpecRail from "./components/SpecRail";
+import MappedSidebar from "./components/MappedSidebar";
 import { loadMappings } from "./data/mappings";
+import {
+  getContextualPrompts,
+  loadPromptRegistry,
+} from "./data/prompts";
 import type { ElementClickData, ElementProperties } from "./viewer/Viewer3D";
 import { runAgentLoop } from "./agent/loop";
+import {
+  buildTableContextPreamble,
+  clearTablaRefinementCache,
+} from "./agent/tools";
+import { getAllTurns, putTurn, type TurnRecord } from "./data/storage";
+import { exportSession } from "./utils/exportChat";
+
+// Boss 2026-08-05 (pilot feedback loop). Generate uuid-shaped ids
+// for IndexedDB records without dragging in a uuid lib for what is
+// essentially a 6-line helper. crypto.randomUUID is available on
+// modern browsers + Node ≥19 (the vitest runner). Fallback uses
+// Date.now + Math.random — same collision profile as Math.random
+// alone, acceptable for a single-pilot-session corpus of <1000 turns.
+function createTurnId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 import {
   indexAll,
   forceReindex,
@@ -50,8 +79,8 @@ const MODEL_ID_DEFAULT_IFC_CLASS: string | null = null;
 // (420px). Min/max clamp prevents the user from squeezing the column
 // to nothing or pushing the 3D viewer off-screen.
 const PDF_SLOT_WIDTH_KEY = "bim-as…idth";
-const PDF_SLOT_WIDTH_DEFAULT = 420;
-const PDF_SLOT_WIDTH_MIN = 280;
+const PDF_SLOT_WIDTH_DEFAULT = 380;
+const PDF_SLOT_WIDTH_MIN = 320;
 const PDF_SLOT_WIDTH_MAX = 1000;
 
 // Boss 2026-08-05 — drawer state is intentionally NOT persisted.
@@ -125,6 +154,14 @@ export default function App() {
   const [userSelectionFilter, setUserSelectionFilter] = useState<Filter | null>(null);
   const [resetTrigger, setResetTrigger] = useState(0);
   const [selectedElement, setSelectedElement] = useState<ElementProperties | null>(null);
+  // Boss 2026-08-05 19:40 — PropertiesOverlay visibility is now
+  // independent from `selectedElement`. The viewer tools toolbar
+  // has a toggle button (eye icon) that flips this flag. Default
+  // `true` so the initial behavior matches before the toggle existed
+  // (overlay shows whenever an element is selected). The × on the
+  // overlay still clears the selection data (unchanged); the toggle
+  // is purely a visibility gate on top of that.
+  const [propertiesVisible, setPropertiesVisible] = useState<boolean>(true);
 
   // ----- Spec column (PdfViewer | SpecRail) -----
   // The spec column shows the PdfViewer when the drawer is at peek
@@ -142,6 +179,13 @@ export default function App() {
     messageIdCounterRef.current += 1;
     return `m-${messageIdCounterRef.current}`;
   }, []);
+  // Boss 2026-08-05 (pilot feedback loop). sessionId rotates on
+  // Reset so an exported session reads cleanly between two resets.
+  // turnIndex is globally monotonic so the markdown export sorts
+  // turns in chronological order across the whole app lifetime.
+  // Both refs are write-only — UI never reads them.
+  const sessionIdRef = useRef<string>(createTurnId());
+  const turnIndexRef = useRef(0);
 
   // ----- Agent status (indexer) -----
   const [agentStatus, setAgentStatus] = useState<AgentStatusState>({ kind: "idle" });
@@ -151,7 +195,7 @@ export default function App() {
   // Binary toggle (closed | open). Initial state is open so the
   // cuantificación panel is visible on app load. The agent's auto-
   // expand effect below fires when latestTable changes.
-  const [drawerState, setDrawerState] = useState<DrawerState>("open");
+  const [drawerState, setDrawerState] = useState<DrawerState>("closed");
 
   // Boss 2026-08-05 09:42 — spec column starts CLOSED. Independent
   // of drawerState: the user clicks the SpecRail to open the spec
@@ -189,6 +233,10 @@ export default function App() {
   // stays intact.
   const handleClearTable = useCallback(() => {
     setLatestTable(null);
+    // Boss 2026-08-05 (R2) — clear the refinement cache so the next
+    // refinement call doesn't operate on stale rows from the
+    // freshly-cleared table.
+    clearTablaRefinementCache();
     setSelectedRowIndex(null);
     setUserSelectionFilter(null);
     setSelectedElement(null);
@@ -216,6 +264,18 @@ export default function App() {
     setSpecOpen(false);
   }, []);
 
+  // Stage 1 Improvement 2 — build a combined filter from all of a
+  // mapping's results. Union with OR so any result's filter can
+  // match. Used by resaltar(seccion_id) + sidebar section click.
+  const buildMappingFilter = useCallback((sectionId: string): Filter | null => {
+    const m = mappings.find((mm) => mm.section_id === sectionId);
+    if (!m || !m.results.length) return null;
+    const filters = m.results.map((r) => r.filter).filter((f) => f.g.length > 0);
+    if (filters.length === 0) return null;
+    if (filters.length === 1) return filters[0];
+    return { c: "OR", g: filters.flatMap((f) => f.g) };
+  }, [mappings]);
+
   // ----- Lookups -----
   const agentMapping = useMemo(
     () => mappings.find((m) => m.section_id === agentMappingId) ?? null,
@@ -239,9 +299,17 @@ export default function App() {
       };
     }
     if (args.seccion_id) {
-      setAgentFilter(null);
       setAgentIfcClass(null);
       setAgentMappingId(args.seccion_id);
+      // Stage 1 Improvement 2: use the mapping's full filter
+      // instead of just ifc_class. Precise highlight — only
+      // the elements the mapping actually targets.
+      const combinedFilter = buildMappingFilter(args.seccion_id);
+      if (combinedFilter) {
+        setAgentFilter(combinedFilter);
+      } else {
+        setAgentFilter(null);
+      }
       const m = mappings.find((mm) => mm.section_id === args.seccion_id);
       const top = m?.results?.[0];
       const criterio = `sección ${args.seccion_id}` + (top ? ` → ${top.ifc_class}` : "");
@@ -374,31 +442,73 @@ export default function App() {
     // for the upcoming response should trigger normally unless the user
     // collapses the drawer again during this turn.
     userHasCollapsedThisTurnRef.current = false;
+    const turnStart = Date.now();
+    const sessionId = sessionIdRef.current;
 
     const userMsg: ChatMessage = { id: newMessageId(), role: "user", text };
+    // Boss 2026-08-05 (pilot feedback loop) — local snapshot of
+    // the turn's messages, mirrored in parallel with React state.
+    // The export utility walks IndexedDB on click; this array
+    // becomes the `messages` field of the TurnRecord we write to
+    // the agent-turns store at the end of handleSend.
+    const turnMessages: ChatMessage[] = [userMsg];
+    const pushMessage = (msg: ChatMessage) => {
+      turnMessages.push(msg);
+      setMessages((m) => [...m, msg]);
+    };
+    // Replicates the same "find the most recent matching tool
+    // bubble and patch it" logic that the React-state setMessages
+    // call did before, but updates both the local snapshot and the
+    // UI state. Keeps the two views consistent without depending
+    // on React render timing.
+    const patchLastTool = (
+      name: string,
+      ok: boolean,
+      summary: string,
+    ) => {
+      const tIdx = turnMessages.findLastIndex(
+        (m) => m.role === "tool" && m.toolName === name && !m.toolResult,
+      );
+      if (tIdx !== -1) {
+        turnMessages[tIdx] = {
+          ...turnMessages[tIdx],
+          toolResult: { ok, summary },
+        };
+      }
+      setMessages((m) => {
+        const idx = [...m].reverse().findIndex(
+          (mm) => mm.role === "tool" && mm.toolName === name && !mm.toolResult,
+        );
+        if (idx === -1) return m;
+        const realIdx = m.length - 1 - idx;
+        const copy = [...m];
+        const target = copy[realIdx];
+        copy[realIdx] = { ...target, toolResult: { ok, summary } };
+        return copy;
+      });
+    };
     setMessages((m) => [...m, userMsg]);
     setBusy(true);
-    const append = (msg: ChatMessage) => setMessages((m) => [...m, msg]);
+    // Boss 2026-08-05 R1 — inject a table-state preamble so the agent
+    // can answer follow-up questions without rebuilding the table
+    // from scratch. Latest table + selected IFC class come from
+    // App.tsx state; viewer match-count isn't surfaced yet so we
+    // pass null (preamble degrades gracefully without it).
+    const tableContext = buildTableContextPreamble(
+      latestTable,
+      agentIfcClass,
+      null,
+    );
     try {
       const finalText = await runAgentLoop(text, toolContext, {
         onToolCallStart: (name, args) => {
-          append({ id: newMessageId(), role: "tool", toolName: name, toolArgs: args });
+          pushMessage({ id: newMessageId(), role: "tool", toolName: name, toolArgs: args } as ChatMessage);
         },
         onToolCallEnd: (name, result) => {
-          setMessages((m) => {
-            const idx = [...m].reverse().findIndex(
-              (mm) => mm.role === "tool" && mm.toolName === name && !mm.toolResult,
-            );
-            if (idx === -1) return m;
-            const realIdx = m.length - 1 - idx;
-            const copy = [...m];
-            const target = copy[realIdx];
-            const summary = result.ok
-              ? summarizeToolResult(name, result.result)
-              : `Error: ${result.error}`;
-            copy[realIdx] = { ...target, toolResult: { ok: result.ok, summary } };
-            return copy;
-          });
+          const summary = result.ok
+            ? summarizeToolResult(name, result.result)
+            : `Error: ${result.error}`;
+          patchLastTool(name, result.ok, summary);
           // Lift the structured `tabla` payload into the drawer state.
           // The auto-expand effect (driven by latestTable) handles the
           // drawer transition with anti-intrusion.
@@ -407,30 +517,94 @@ export default function App() {
             if (t) {
               setLatestTable(t);
             }
+            // Stage 1 Improvement 1 — extract agent-driven sidebar filter.
+            // When the agent sets filtrar_mapeos, the tool returns
+            // tarjetas_visibles. Null/undefined → clear filter (show all).
+            // Empty array → filter returned nothing (sidebar shows empty state).
+            if (result.result.tarjetas_visibles !== undefined) {
+              setSidebarFilterIds(
+                result.result.tarjetas_visibles.length > 0
+                  ? result.result.tarjetas_visibles
+                  : null,
+              );
+              // Auto-expand spec column when agent filters cards.
+              if (result.result.tarjetas_visibles.length > 0) {
+                setSpecOpen(true);
+                // Auto-isolate: apply the first matching section's
+                // mapping filter to the 3D viewer so elements light
+                // up immediately without a manual card click.
+                const firstId = result.result.tarjetas_visibles[0];
+                const combined = buildMappingFilter(firstId);
+                if (combined) {
+                  setAgentFilter(combined);
+                  setAgentIfcClass(null);
+                  setAgentMappingId(firstId);
+                } else {
+                  // Fallback: if the section has no filter expression,
+                  // highlight by ifc_class instead.
+                  setAgentFilter(null);
+                  setAgentMappingId(firstId);
+                  const m = mappings.find((mm) => mm.section_id === firstId);
+                  if (m?.results?.[0]?.ifc_class) {
+                    setAgentIfcClass(m.results[0].ifc_class);
+                  }
+                }
+              }
+            }
           }
         },
         onFinalAnswer: (text) => {
-          append({ id: newMessageId(), role: "agent", text });
+          pushMessage({ id: newMessageId(), role: "agent", text } as ChatMessage);
         },
         onError: (message) => {
-          append({ id: newMessageId(), role: "error", error: message });
+          pushMessage({ id: newMessageId(), role: "error", error: message } as ChatMessage);
         },
-      });
+      },
+        undefined, // signal — chat path doesn't pass AbortSignal today
+        tableContext ?? undefined,
+      );
       setMessages((m) => {
         const last = m[m.length - 1];
         if (last?.role === "agent" && last.text === finalText) return m;
-        return [...m, { id: newMessageId(), role: "agent", text: finalText }];
+        const final: ChatMessage = { id: newMessageId(), role: "agent", text: finalText };
+        turnMessages.push(final);
+        return [...m, final];
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setMessages((m) => [
-        ...m,
-        { id: newMessageId(), role: "error", error: message },
-      ]);
+      pushMessage({ id: newMessageId(), role: "error", error: message } as ChatMessage);
     } finally {
       setBusy(false);
+      // Boss 2026-08-05 (pilot feedback loop). Persist this turn to
+      // IndexedDB so the "↗ Exportar" button can dump the full
+      // transcript later. Fire-and-forget — a putTurn failure
+      // shouldn't surface in the chat. The agent-turns corpus is
+      // the dev team's prompt-refinement input; if it's missing
+      // we lose signal but the app still works.
+      if (turnMessages.length > 0) {
+        const turn: TurnRecord = {
+          turn_id: createTurnId(),
+          session_id: sessionId,
+          turn_index: turnIndexRef.current++,
+          created_at: new Date(turnStart).toISOString(),
+          duration_ms: Date.now() - turnStart,
+          messages: [...turnMessages],
+        };
+        putTurn(turn).catch((err) => {
+          console.warn("[turn-log] putTurn failed:", err);
+        });
+      }
     }
-  }, [toolContext, newMessageId]);
+  }, [toolContext, newMessageId, latestTable, agentIfcClass, mappings, buildMappingFilter]);
+
+  // Boss 2026-08-05 19:40 — Properties Panel toggle for the
+  // viewer tools toolbar (under the NavCube). Click flips the
+  // visibility gate; the overlay itself still requires
+  // `selectedElement` to be truthy, so a toggled-off panel
+  // doesn't resurrect stale data.
+  const handleToggleProperties = useCallback(() => {
+    setPropertiesVisible((v) => !v);
+  }, []);
 
   const handleReset = useCallback(() => {
     setMessages([]);
@@ -443,14 +617,60 @@ export default function App() {
     setPdfPage(1);
     setPdfSectionId(null);
     setLatestTable(null);
+    // Boss 2026-08-05 (R2) — clear the refinement cache so a full
+    // reset doesn't leave stale rows in `lastTablaCache`.
+    clearTablaRefinementCache();
     // Boss 2026-08-05 11:40 — reset to the default ("open"), matching
     // the initial state. Earlier this was "expanded"; with the
     // binary closed/open model the button now starts and resets to
     // the same state.
     setDrawerState("open");
     setSpecOpen(false);
+    setSidebarFilterIds(null);
+    // Boss 2026-08-05 19:40 — full reset also restores the
+    // PropertiesOverlay visibility to its default (on).
+    setPropertiesVisible(true);
     userHasCollapsedThisTurnRef.current = false;
+    // Boss 2026-08-05 (pilot feedback loop) — rotate the session
+    // id so the next "↗ Exportar" click exports only the turns
+    // that happen AFTER this reset, not everything from app load.
+    sessionIdRef.current = createTurnId();
   }, []);
+
+  // Boss 2026-08-05 (pilot feedback loop) — Export session button.
+  // Reads the IndexedDB agent-turns store, hands the turns to the
+  // pure formatter in src/utils/exportChat.ts, and triggers the
+  // browser download. Failure here is silent — the most likely
+  // cause is a malformed Blob on legacy browsers; the chat still
+  // works on the next click.
+  const handleExport = useCallback(() => {
+    void (async () => {
+      try {
+        const turns = await getAllTurns();
+        exportSession(turns, null);
+      } catch (err) {
+        console.warn("[export] session export failed:", err);
+      }
+    })();
+  }, []);
+
+  // Boss 2026-08-05 R3 — contextual suggested prompts. Registry is
+  // loaded once at module-init (Vite bundles the JSON statically,
+  // HMR replays the loader on save). The actual prompt list
+  // rebuilds whenever the table or selected class changes. Viewer
+  // match count isn't surfaced yet → null (preamble and prompt list
+  // both degrade gracefully without it).
+  const promptRegistry = useMemo(() => loadPromptRegistry(), []);
+  const contextualPrompts = useMemo(
+    () =>
+      getContextualPrompts(
+        promptRegistry,
+        latestTable,
+        agentIfcClass,
+        null,
+      ),
+    [promptRegistry, latestTable, agentIfcClass],
+  );
 
   // ----- 3D element click -----
   const handleElementClick = useCallback((data: ElementClickData) => {
@@ -539,10 +759,11 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  // Spec column width: pdfSlotWidth when specOpen, 44px rail
-  // otherwise. Boss 2026-08-05 09:42 — decoupled from drawerState;
-  // both panels are independently opened/closed.
+  // Spec column width: pdfSlotWidth when specOpen, 44px otherwise.
   const specColumnWidthPx = specOpen ? pdfSlotWidth : SPEC_RAIL_WIDTH;
+
+  // Stage 1 Improvement 1: agent-driven sidebar filtering.
+  const [sidebarFilterIds, setSidebarFilterIds] = useState<string[] | null>(null);
 
   return (
     <div className={styles.shell}>
@@ -556,16 +777,16 @@ export default function App() {
         </div>
         <div className={styles.headerRight}>
           <span className={styles.metaPill}>{mappings.length} secciones</span>
+          <HeaderStatus
+            status={agentStatus}
+            onReindex={
+              agentStatus.kind === "ready" || agentStatus.kind === "error"
+                ? handleReindex
+                : undefined
+            }
+          />
         </div>
       </header>
-      <AgentStatus
-        status={agentStatus}
-        onReindex={
-          agentStatus.kind === "ready" || agentStatus.kind === "error"
-            ? handleReindex
-            : undefined
-        }
-      />
       <main className={styles.body}>
         <aside className={styles.left}>
           <ChatPanel
@@ -573,6 +794,8 @@ export default function App() {
             busy={busy}
             onSend={handleSend}
             onReset={handleReset}
+            onExport={handleExport}
+            contextualPrompts={contextualPrompts}
           />
         </aside>
         <section
@@ -582,18 +805,46 @@ export default function App() {
         >
           {specOpen ? (
             <>
-              <PdfViewer
-                pdfUrl="/eett-c.pdf"
-                currentPage={pdfPage}
-                onPageChange={setPdfPage}
-                onClickSection={(id) => {
-                  setPdfSectionId(id);
-                  const page = sectionIdToPageHeuristic(id);
-                  setPdfPage(page);
-                }}
-                selectedSectionId={pdfSectionId}
-                onCollapse={handleSpecCollapse}
-              />
+              <div className={styles.specCompound}>
+                <div className={styles.specPdfWrap}>
+                  <PdfViewer
+                    pdfUrl="/eett-c.pdf"
+                    currentPage={pdfPage}
+                    onPageChange={setPdfPage}
+                    onClickSection={(id) => {
+                      setPdfSectionId(id);
+                      const page = sectionIdToPageHeuristic(id);
+                      setPdfPage(page);
+                    }}
+                    selectedSectionId={pdfSectionId}
+                    onCollapse={handleSpecCollapse}
+                  />
+                </div>
+                <MappedSidebar
+                  mappings={mappings}
+                  selectedId={agentMappingId ?? pdfSectionId}
+                  onSelect={(id) => {
+                    setPdfSectionId(id);
+                    const combined = buildMappingFilter(id);
+                    if (combined) {
+                      setAgentFilter(combined);
+                      setAgentIfcClass(null);
+                      setAgentMappingId(id);
+                    } else {
+                      setAgentFilter(null);
+                      setAgentMappingId(id);
+                      const m = mappings.find((mm) => mm.section_id === id);
+                      if (m?.results?.[0]?.ifc_class) {
+                        setAgentIfcClass(m.results[0].ifc_class);
+                      }
+                    }
+                    const page = sectionIdToPageHeuristic(id);
+                    setPdfPage(page);
+                  }}
+                  activeTab="mapped"
+                  agentFilterIds={sidebarFilterIds}
+                />
+              </div>
               <div
                 className={styles.splitter}
                 onMouseDown={startPanelResize}
@@ -625,11 +876,19 @@ export default function App() {
                 setSelectedElement(null);
                 setResetTrigger((k) => k + 1);
               }}
+              onToggleProperties={handleToggleProperties}
+              propertiesVisible={propertiesVisible}
             />
-            <PropertiesOverlay
-              data={selectedElement}
-              onClose={() => setSelectedElement(null)}
-            />
+            {/* Boss 2026-08-05 19:40 — the overlay now requires both
+                a selected element AND the visibility gate to be on.
+                The toolbar toggle flips the gate; the × on the overlay
+                itself still clears the selection (unchanged). */}
+            {selectedElement && propertiesVisible && (
+              <PropertiesOverlay
+                data={selectedElement}
+                onClose={() => setSelectedElement(null)}
+              />
+            )}
           </div>
           <CuantificacionDrawer
             data={latestTable}

@@ -13,7 +13,7 @@
 // without re-querying.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildTSV, buildCSV, copyToClipboard, type Row as DataRow } from "../utils/copy";
+import { buildCSV, downloadCSV, slugifyForFilename, timestampForFilename, type Row as DataRow } from "../utils/copy";
 import type { QuantificationTable } from "../quantification/types";
 import styles from "./QuantificationPanel.module.css";
 
@@ -288,20 +288,20 @@ export default function QuantificationPanel({ data, onRowSelect, selectedRowInde
   const ariaSortFor = (col: string): "ascending" | "descending" | "none" =>
     sortKey === col && sortDir ? (sortDir === "asc" ? "ascending" : "descending") : "none";
 
-  const totalRows = data.filas.length;
-  const filteredCount = rowsWithMeta.length;
-  const generableAt = formatTime(data.generadaEn);
-
-  const onCopy = async (format: "tsv" | "csv") => {
+  // surface only had clipboard copy; "export" was missing. The
+  // filename is the slugified table title + a local timestamp so
+  // re-exports don't collide on the user's filesystem.
+  const onExportCSV = () => {
     const headers = allColumns;
     const rows = rowsWithMeta.map((m) => {
       const out: DataRow = {};
       for (const c of headers) out[c] = m.row[c];
       return out;
     });
-    const text = format === "tsv" ? buildTSV(headers, rows) : buildCSV(headers, rows);
-    const ok = await copyToClipboard(text);
-    setCopyHint(ok ? `${format.toUpperCase()} copiado` : `Error al copiar ${format.toUpperCase()}`);
+    const text = buildCSV(headers, rows);
+    const filename = `${slugifyForFilename(data.titulo)}-${timestampForFilename()}.csv`;
+    const ok = downloadCSV(filename, text);
+    setCopyHint(ok ? `CSV exportado` : `Error al exportar CSV`);
     window.setTimeout(() => setCopyHint(null), 1800);
   };
 
@@ -323,25 +323,69 @@ export default function QuantificationPanel({ data, onRowSelect, selectedRowInde
   return (
     <div className={styles.panel}>
       <header className={styles.header}>
-        <div className={styles.headerInfo}>
-          <div className={styles.title} title={data.titulo}>{data.titulo}</div>
-          <div className={styles.meta}>
-            Generado {generableAt} · fuente: {labelFuente(data.fuente)} · {totalRows}{" "}
-            fila{totalRows === 1 ? "" : "s"}
-            {filteredCount !== totalRows && ` · ${filteredCount} visibles`}
-          </div>
-        </div>
-        {onClear && (
+        <div className={styles.toolbar}>
           <button
             type="button"
-            className={styles.clearBtn}
-            onClick={onClear}
-            aria-label="Limpiar tabla"
-            title="Limpiar tabla"
+            className={styles.toolbarBtn}
+            onClick={onExportCSV}
+            aria-label="Exportar tabla como archivo CSV"
+            title="Descargar como archivo CSV (UTF-8 con BOM, RFC-4180)"
           >
-            ×
+            Exportar CSV
           </button>
-        )}
+          <div className={styles.addColumnWrap}>
+            <button
+              type="button"
+              className={styles.toolbarBtn}
+              onClick={() => setShowColumnMenu((s) => !s)}
+              disabled={addableProperties.length === 0}
+              aria-haspopup="menu"
+              aria-expanded={showColumnMenu}
+              title={
+                addableProperties.length === 0
+                  ? "No hay más propiedades para agregar"
+                  : "Agregar columna desde las propiedades disponibles del modelo"
+              }
+            >
+              + Agregar columna
+            </button>
+            {showColumnMenu && addableProperties.length > 0 && (
+              <div role="menu" className={styles.columnMenu}>
+                {addableProperties.map((prop) => (
+                  <button
+                    key={prop}
+                    type="button"
+                    role="menuitem"
+                    className={styles.columnMenuItem}
+                    onClick={() => addColumn(prop)}
+                  >
+                    {prop}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <input
+            type="search"
+            className={styles.search}
+            placeholder="Buscar…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            aria-label="Filtrar filas"
+          />
+          {onClear && (
+            <button
+              type="button"
+              className={styles.clearBtn}
+              onClick={onClear}
+              aria-label="Limpiar tabla"
+              title="Limpiar tabla"
+            >
+              ×
+            </button>
+          )}
+          {copyHint && <span className={styles.copyHint} aria-live="polite">{copyHint}</span>}
+        </div>
       </header>
       <div className={styles.tableWrap} ref={tableWrapRef}>
         <table className={styles.table}>
@@ -455,67 +499,6 @@ export default function QuantificationPanel({ data, onRowSelect, selectedRowInde
           </tbody>
         </table>
       </div>
-      <footer className={styles.toolbar}>
-        <button
-          type="button"
-          className={styles.toolbarBtn}
-          onClick={() => onCopy("tsv")}
-          aria-label="Copiar tabla como TSV"
-          title="Copiar como TSV (tab-separado, pegar en Excel)"
-        >
-          Copiar TSV
-        </button>
-        <button
-          type="button"
-          className={styles.toolbarBtn}
-          onClick={() => onCopy("csv")}
-          aria-label="Copiar tabla como CSV"
-          title="Copiar como CSV (RFC-4180)"
-        >
-          Copiar CSV
-        </button>
-        <div className={styles.addColumnWrap}>
-          <button
-            type="button"
-            className={styles.toolbarBtn}
-            onClick={() => setShowColumnMenu((s) => !s)}
-            disabled={addableProperties.length === 0}
-            aria-haspopup="menu"
-            aria-expanded={showColumnMenu}
-            title={
-              addableProperties.length === 0
-                ? "No hay más propiedades para agregar"
-                : "Agregar columna desde las propiedades disponibles del modelo"
-            }
-          >
-            + Agregar columna
-          </button>
-          {showColumnMenu && addableProperties.length > 0 && (
-            <div role="menu" className={styles.columnMenu}>
-              {addableProperties.map((prop) => (
-                <button
-                  key={prop}
-                  type="button"
-                  role="menuitem"
-                  className={styles.columnMenuItem}
-                  onClick={() => addColumn(prop)}
-                >
-                  {prop}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <input
-          type="search"
-          className={styles.search}
-          placeholder="Buscar…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          aria-label="Filtrar filas"
-        />
-        {copyHint && <span className={styles.copyHint} aria-live="polite">{copyHint}</span>}
-      </footer>
     </div>
   );
 }
@@ -541,19 +524,4 @@ function formatCell(v: unknown): string {
   return String(v);
 }
 
-function formatTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return iso;
-  }
-}
 
-function labelFuente(f: string): string {
-  if (f === "modelo") return "modelo BIM";
-  if (f === "especificacion") return "especificación PDF";
-  if (f === "mapeos") return "mapeos";
-  return f;
-}

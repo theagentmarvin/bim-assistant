@@ -35,9 +35,39 @@ interface Props {
   busy: boolean;
   onSend: (text: string) => void;
   onReset: () => void;
+  // Boss 2026-08-05 R3 — contextual suggested prompts. When the
+  // chat is empty, the parent (App) passes a dynamic list sourced
+  // from getContextualPrompts + the user-prompts registry. Empty
+  // array (default) falls back to the static examples that shipped
+  // before R3. Click flow unchanged — both forms are displayed, not
+  // auto-submitted.
+  contextualPrompts?: string[];
+  // Boss 2026-08-05 (pilot feedback loop) — Export session as a
+  // markdown file. The parent reads the IndexedDB agent-turns store
+  // and triggers a browser download. We don't take the turns as a
+  // prop because the chat UI doesn't own persistence — App does.
+  // Disabled when `messages` is empty (no transcript to export).
+  onExport?: () => void;
 }
 
-export default function ChatPanel({ messages, busy, onSend, onReset }: Props) {
+// Fallback suggested prompts shown when App hasn't supplied any.
+// Kept verbatim so existing users see zero behavior change until the
+// parent explicitly opts in via the contextualPrompts prop.
+const DEFAULT_EXAMPLES: readonly string[] = [
+  "¿Cuántos muros hay en el modelo?",
+  "muéstrame los muros exteriores",
+  "abre la sección sobre siding",
+  "¿qué dice la especificación sobre el siding?",
+];
+
+export default function ChatPanel({
+  messages,
+  busy,
+  onSend,
+  onReset,
+  contextualPrompts = [],
+  onExport,
+}: Props) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -77,27 +107,41 @@ export default function ChatPanel({ messages, busy, onSend, onReset }: Props) {
           <span className={styles.brand}>Salfa BIM Agent 01</span>
           <span className={styles.subtitle}>Asistente BIM</span>
         </div>
-        <button
-          type="button"
-          className={styles.resetBtn}
-          onClick={onReset}
-          title="Limpiar chat, resaltado y navegación del PDF"
-        >
-          ⟳ Limpiar
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.exportBtn}
+            onClick={onExport}
+            disabled={!onExport || messages.length === 0 || busy}
+            title="Descargar la conversación como archivo .md para reportar errores al equipo"
+          >
+            ↗ Exportar
+          </button>
+          <button
+            type="button"
+            className={styles.resetBtn}
+            onClick={onReset}
+            title="Limpiar chat, resaltado y navegación del PDF"
+          >
+            ⟳ Limpiar
+          </button>
+        </div>
       </div>
       <div className={styles.list} ref={listRef}>
-        {messages.length === 0 && (
-          <div className={styles.empty}>
-            <div className={styles.emptyTitle}>Pregúntale a Salfa BIM Agent 01</div>
-            <ul className={styles.examples}>
-              <li>¿Cuántos muros hay en el modelo?</li>
-              <li>muéstrame los muros exteriores</li>
-              <li>abre la sección sobre siding</li>
-              <li>¿qué dice la especificación sobre el siding?</li>
-            </ul>
-          </div>
-        )}
+        {(() => {
+          if (messages.length > 0) return null;
+          const list = contextualPrompts.length > 0 ? contextualPrompts : DEFAULT_EXAMPLES;
+          return (
+            <div className={styles.empty}>
+              <div className={styles.emptyTitle}>Pregúntale a Salfa BIM Agent 01</div>
+              <ul className={styles.examples}>
+                {list.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
         {messages.map((m) => (
           <MessageRow key={m.id} message={m} />
         ))}
@@ -117,18 +161,11 @@ export default function ChatPanel({ messages, busy, onSend, onReset }: Props) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Escribe tu pregunta… (Enter para enviar, Shift+Enter para nueva línea)"
-          rows={2}
+          placeholder="Pregúntale a Salfa BIM Agent 01…"
+          rows={3}
           disabled={busy}
           aria-label="Mensaje para Salfa BIM Agent 01"
         />
-        <button
-          type="submit"
-          className={styles.sendBtn}
-          disabled={busy || draft.trim().length === 0}
-        >
-          Enviar
-        </button>
       </form>
     </div>
   );

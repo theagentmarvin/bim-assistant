@@ -33,6 +33,12 @@ export interface ToolParameterProperty {
   // breaking the rest of the surface).
   properties?: Record<string, ToolParameterProperty>;
   items?: ToolParameterProperty;
+  // Boss 2026-08-05 (fix #B1) — nested objects need their own
+  // `required` array. The top-level `required` lives on the schema's
+  // `parameters` object, but for nested objects like `calcular` we
+  // declare required keys here so the LLM knows both `operacion` and
+  // `columna` are mandatory.
+  required?: string[];
 }
 
 export interface ToolSchema {
@@ -85,6 +91,136 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
             titulo: {
               type: "string",
               description: "Título en español para la cabecera de la tabla.",
+            },
+            // Boss 2026-08-05 (fix #B1) — `calcular` was wired up
+            // in tools.ts (buildTabla + refinarTabla) earlier but
+            // never exposed to the LLM via the JSON schema. Without
+            // this field, the LLM had no slot to emit, so totales
+            // were never computed and the TOTAL row never rendered.
+            //
+            // 2026-08-05 (fix #B1.b) — Boss screenshot showed 3
+            // columns (Area, Largo, Alto) with no totals. The
+            // original schema was a single object, so the LLM could
+            // only pick ONE column per call. Array form lets the
+            // LLM emit "sum Area + sum Largo + sum Alto" in a
+            // single tool call → one TOTAL row per column, all
+            // aligned at the bottom of the table.
+            //
+            // Works alongside `refinar`: re-emit `calcular` next
+            // to a `refinar` filter and the refinement inherits
+            // the totals from the same spec.
+            calcular: {
+              type: "array",
+              description:
+                "Lista de operaciones agregadas. Cada elemento añade una fila TOTAL al final de la tabla con la operación indicada sobre su columna. Úsalo cuando el usuario pide 'suma total', 'promedio', 'mínimo', 'máximo' de UNA O MÁS propiedades. Cada columna DEBE estar en `columnas`. La unidad se infiere del sufijo Qto_ (m², m³, m).",
+              items: {
+                type: "object",
+                description: "Una operación de agregación sobre una columna.",
+                properties: {
+                  operacion: {
+                    type: "string",
+                    enum: ["suma", "promedio", "min", "max"],
+                    description: "Operación de agregación.",
+                  },
+                  columna: {
+                    type: "string",
+                    description:
+                      "Etiqueta en español de la columna a agregar (de las que ya pasaste en `columnas`).",
+                  },
+                },
+                required: ["operacion", "columna"],
+              },
+            },
+            refinar: {
+              type: "object",
+              description:
+                "Boss 2026-08-05 (R2) — refina la tabla activa del último buildTabla. Reemplaza la reconstrucción desde cero. Bypassea el safeguard de clase_ifc; el refinamiento hereda el contexto de clase del cache.",
+              properties: {
+                filtrar_por: {
+                  type: "object",
+                  description:
+                    "Filtra filas según una columna y un valor. Default operador=igual.",
+                  properties: {
+                    columna: {
+                      type: "string",
+                      description: "Etiqueta de la columna a evaluar.",
+                    },
+                    valor: {
+                      type: "string",
+                      description: "Valor a comparar (como string).",
+                    },
+                    operador: {
+                      type: "string",
+                      enum: ["igual", "no_igual", "contiene", "no_contiene", "mayor_que", "no_mayor_que", "menor_que", "no_menor_que"],
+                      description: "Operador de comparación. Default igual. Prefijo 'no_' invierte (no_igual = no exactamente igual, no_contiene = no incluye el substring, etc).",
+                    },
+                  },
+                },
+                agregar_columnas: {
+                  type: "array",
+                  description: "Columnas a agregar al display (de available_properties).",
+                  items: {
+                    type: "string",
+                    description: "Etiqueta de columna en español.",
+                  },
+                },
+                quitar_columnas: {
+                  type: "array",
+                  description: "Columnas a ocultar del display (no se eliminan).",
+                  items: {
+                    type: "string",
+                    description: "Etiqueta de columna en español.",
+                  },
+                },
+                ordenar_por: {
+                  type: "object",
+                  description: "Re-ordena las filas cacheadas por esta columna.",
+                  properties: {
+                    columna: {
+                      type: "string",
+                      description: "Etiqueta de la columna a ordenar.",
+                    },
+                    direccion: {
+                      type: "string",
+                      enum: ["asc", "desc"],
+                      description: "Dirección del orden.",
+                    },
+                  },
+                },
+                quitar_filtro: {
+                  type: "boolean",
+                  description: "Si true, restaura el conjunto de filas original (re-query con el clase_ifc cacheado).",
+                },
+              },
+            },
+          },
+        },
+        filtrar_mapeos: {
+          type: "object",
+          description:
+            "Stage 1 — filtra las tarjetas del panel izquierdo. Úsalo cuando el usuario pida ver solo ciertas secciones de la especificación (ej: 'secciones sobre puertas', 'solo mapeos de muros', 'tarjetas con confianza baja'). Todos los campos son opcionales y se combinan con AND. El tool devuelve tarjetas_visibles con los section_id que cumplen.",
+          properties: {
+            ifc_class: {
+              type: "string",
+              description: "Solo secciones mapeadas a esta clase IFC (ej: 'IfcDoor').",
+            },
+            pass: {
+              type: "string",
+              enum: ["canonical", "high", "medium", "review", "offline"],
+              description: "Solo secciones cuyo mejor resultado tenga este pass. También acepta un array de valores (ej: ['canonical','high']).",
+            },
+            conf_min: {
+              type: "number",
+              description: "Solo secciones con confianza ≥ este número (0-1). Ej: 0.7.",
+            },
+            status: {
+              type: "string",
+              enum: ["mapped", "review", "unmapped"],
+              description: "Solo secciones con este status.",
+            },
+            query: {
+              type: "string",
+              description: "Búsqueda aproximada (fuzzy) sobre section_title + rationale. Ej: 'puerta' encuentra 'Puerta ancho 70', 'Puerta PVC', etc.",
             },
           },
         },

@@ -1,0 +1,453 @@
+/* MappedSidebar.module.css
+ *
+ * Narrow sidebar (160px) docked to the PDF viewer. No overlays.
+ * Detail appears as an inline bottom panel.
+ *
+ * Stage 1 (bim-assistant port, 2026-08-05):
+ *   - Agent filter bar added (.agentFilterBar)
+ *   - Correction buttons stripped (no .actionBar, .acceptBtn, etc.)
+ *   - Original spec-mapper round 2 improvements preserved
+ */
+
+/* ============================================================
+ * Sidebar
+ * ============================================================ */
+
+.sidebar {
+  width: 160px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ff-bg-panel);
+  border-left: 1px solid var(--ff-border);
+  overflow: hidden;
+  height: 100%;
+}
+
+/* ============================================================
+ * Agent filter indicator (Stage 1 Improvement 1)
+ * ============================================================ */
+
+.agentFilterBar {
+  flex-shrink: 0;
+  padding: 4px 6px;
+  background: var(--ff-tag-section-bg);
+  color: var(--ff-tag-section-text);
+  font-size: 9px;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid var(--ff-border);
+  line-height: 1.3;
+}
+
+/* ============================================================
+ * List area
+ * ============================================================ */
+
+.listArea {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.list {
+  list-style: none;
+  padding: 2px 0;
+  margin: 0;
+  background: var(--ff-bg-panel);
+}
+
+/* Pass-band left border tint for list items */
+.itemPassGreen { border-left-color: #2e7d32; }
+.itemPassYellow { border-left-color: #b45309; }
+.itemPassRed { border-left-color: #991b1b; }
+.itemPassGray { border-left-color: #999; }
+
+/* ============================================================
+ * List items
+ * ============================================================ */
+
+.item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.list li:nth-child(even) .item:not(.itemSelected) {
+  background: #fafafa;
+}
+
+.item:hover { background: var(--ff-bg-hover); }
+
+.itemSelected {
+  background: var(--ff-bg-hover);
+  border-left-color: var(--ff-blue-active);
+}
+
+.list li:nth-child(even) .itemSelected {
+  background: var(--ff-bg-hover);
+}
+
+.itemTop {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-bottom: 1px;
+  min-width: 0;
+}
+
+.sectionId {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ff-text-muted);
+  font-family: "SF Mono", monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ff-text-primary);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 1px;
+}
+
+.ifcClass {
+  font-size: 9px;
+  color: var(--ff-text-muted);
+  font-family: "SF Mono", monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conf {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ff-text-primary);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================
+ * Pass mini-badges + unmapped
+ * ============================================================ */
+
+.passMini {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.passGreen { background: var(--ff-tag-arq-bg); color: var(--ff-tag-arq-text); }
+.passYellow { background: var(--ff-tag-section-bg); color: var(--ff-tag-section-text); }
+.passRed { background: #fee2e2; color: #991b1b; }
+.passGray { background: var(--ff-badge-bg); color: var(--ff-text-muted); }
+
+.unmappedBadge {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  line-height: 1.2;
+  background: var(--ff-tag-section-bg);
+  color: var(--ff-tag-section-text);
+}
+
+/* ============================================================
+ * Empty state
+ * ============================================================ */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 8px;
+  text-align: center;
+}
+
+.emptyTitle { font-size: 11px; font-weight: 600; color: var(--ff-text-primary); margin-bottom: 2px; }
+.emptySub { font-size: 10px; color: var(--ff-text-muted); line-height: 1.3; }
+
+/* ============================================================
+ * Resize handle — between list and detail panel
+ * ============================================================ */
+
+.resizeHandle {
+  height: 5px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  background: var(--ff-border);
+  transition: background 0.15s;
+  touch-action: none;
+  user-select: none;
+}
+
+.resizeHandle:hover,
+.resizeHandle:active {
+  background: var(--ff-blue-active);
+}
+
+/* ============================================================
+ * Detail wrap — fixed-height container below list
+ * ============================================================ */
+
+.detailWrap {
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================================
+ * Detail panel
+ * ============================================================ */
+
+.detailPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--ff-border);
+  background: var(--ff-bg-app);
+}
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--ff-border);
+  flex-shrink: 0;
+  background: var(--ff-bg-panel);
+}
+
+.detailSectionId {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ff-text-primary);
+  font-family: "SF Mono", monospace;
+}
+
+.detailStatus {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  background: var(--ff-badge-bg);
+  color: var(--ff-text-muted);
+}
+
+.detailBody {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 7px;
+}
+
+/* ============================================================
+ * Result card
+ * ============================================================ */
+
+.resultCard {
+  margin-bottom: 8px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--ff-border);
+  border-radius: 5px;
+}
+
+.resultCard:last-child { margin-bottom: 0; }
+
+.resultHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 7px;
+}
+
+.passBadge {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+ * Confidence bar
+ * ============================================================ */
+
+.confBar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 9px;
+  padding: 6px 7px;
+  background: #f4f8fc;
+  border-radius: 4px;
+}
+
+.confTrack {
+  flex: 1;
+  height: 4px;
+  background: #dce8f2;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.confFill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 200ms ease;
+}
+
+.confLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ff-text-primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 30px;
+  text-align: right;
+}
+
+/* ============================================================
+ * Concept tags
+ * ============================================================ */
+
+.conceptMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 9px;
+  font-size: 9px;
+  color: var(--ff-text-muted);
+}
+
+.conceptMeta span,
+.conceptMeta code {
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: #f5f5f5;
+  border: 1px solid var(--ff-border);
+  white-space: nowrap;
+}
+
+.conceptMeta code {
+  font-family: "SF Mono", monospace;
+  color: var(--ff-blue-active);
+}
+
+/* ============================================================
+ * Progressive disclosure toggles
+ * ============================================================ */
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 6px;
+  margin-bottom: 4px;
+  background: #f8f8f8;
+  border: 1px solid var(--ff-border);
+  border-radius: 4px;
+  font-family: var(--ff-font-stack);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ff-text-secondary);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.toggleRow:hover {
+  background: #efefef;
+}
+
+.toggleLabel {
+  font-size: 10px;
+}
+
+.toggleArrow {
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+
+.toggleArrowOpen {
+  font-size: 9px;
+  transform: rotate(90deg);
+}
+
+/* ============================================================
+ * Rationale
+ * ============================================================ */
+
+.rationale {
+  font-size: 10px;
+  color: var(--ff-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 9px;
+  padding: 0 3px;
+  word-wrap: break-word;
+}
+
+/* ============================================================
+ * Filter box
+ * ============================================================ */
+
+.filterBox {
+  background: #f8f8f8;
+  border: 1px solid var(--ff-border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.filterSummary {
+  font-size: 9px;
+  color: var(--ff-text-primary);
+  padding: 5px 7px;
+  font-family: "SF Mono", monospace;
+  border-bottom: 1px solid var(--ff-divider);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.matchStats {
+  padding: 3px 7px;
+  font-size: 9px;
+  color: var(--ff-text-muted);
+}

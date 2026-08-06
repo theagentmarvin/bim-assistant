@@ -123,6 +123,22 @@ interface Props {
    *  model. Boss directive 2026-07-27 09:40 — reset view should not
    *  reload the IFC. */
   resetTrigger?: number;
+  /** Callback fired by the Reset View icon in the viewer tools toolbar
+   *  (anchored under the NavCube at top: 146px, right: 10px). The parent
+   *  supplies the action — typically clearing agent filter / user
+   *  selection filter / selected element AND bumping resetTrigger.
+   *  Optional: if not provided, the icon is not rendered. */
+  onResetView?: () => void;
+  /** Callback fired by the Properties Panel toggle icon. Toggles the
+   *  visibility of the PropertiesOverlay (independent of whether an
+   *  element is currently selected — the overlay is gated on
+   *  `selectedElement && propertiesVisible` in App.tsx). Optional: if
+   *  not provided, the icon is not rendered. */
+  onToggleProperties?: () => void;
+  /** Current state of the PropertiesOverlay. Drives the toggle icon's
+   *  active/inactive styling (`data-active` attribute). Defaults to
+   *  undefined when `onToggleProperties` is not provided. */
+  propertiesVisible?: boolean;
 }
 
 class EB extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -136,7 +152,7 @@ class EB extends React.Component<{ children: React.ReactNode }, { error: Error |
 
 export default function Viewer3D(p: Props) { return <EB><V {...p} /></EB>; }
 
-function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElementClick, onElementData, resetTrigger }: Props) {
+function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElementClick, onElementData, resetTrigger, onResetView, onToggleProperties, propertiesVisible }: Props) {
   const cr = useRef<HTMLDivElement | null>(null);
   const compR = useRef<OBC.Components | null>(null);
   const fragsR = useRef<OBC.FragmentsManager | null>(null);
@@ -937,6 +953,46 @@ function V({ selectedIfcClass, mapping, agentFilter, userSelectionFilter, onElem
       </div>
       {selectedIfcClass && (
         <div className={styles.classBadge}><span className={styles.classBadgeLabel}>highlight:</span>{selectedIfcClass}</div>
+      )}
+      {/* Boss 2026-08-05 19:40 — viewer tools toolbar, anchored under
+       * the NavCube at top-right of the canvas. Transparent container
+       * carrying viewer-related icon buttons (Reset View, Properties
+       * Panel toggle, future additions). 128px wide matches the cube
+       * width for visual alignment; 36px tall. Sits 8px below the cube
+       * (10 + 128 + 8 = 146). z-index 12 — above the cube's 11, below
+       * any modal/overlay. Each button carries its own chrome (panel
+       * background, border, hover/active state); the container itself
+       * is transparent so the viewer canvas shows through the gaps.
+       *
+       * Container renders only when at least one button has a callback
+       * supplied, so the toolbar doesn't take up click-area when empty. */}
+      {(onResetView || onToggleProperties) && (
+        <div className={styles.viewerToolsToolbar}>
+          {onResetView && (
+            <button
+              type="button"
+              className={styles.toolbarBtn}
+              onClick={onResetView}
+              title="Reset 3D view — re-centers camera and clears highlights"
+              aria-label="Reset 3D view"
+            >
+              ↻
+            </button>
+          )}
+          {onToggleProperties && (
+            <button
+              type="button"
+              className={styles.toolbarBtn}
+              data-active={propertiesVisible ? "true" : "false"}
+              onClick={onToggleProperties}
+              title={propertiesVisible ? "Ocultar panel de propiedades" : "Mostrar panel de propiedades"}
+              aria-label="Alternar panel de propiedades"
+              aria-pressed={!!propertiesVisible}
+            >
+              👁
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

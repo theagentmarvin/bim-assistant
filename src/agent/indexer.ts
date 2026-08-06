@@ -158,6 +158,18 @@ function chunkModelo(): Array<{
   return chunks;
 }
 
+function renderFilterForRag(f: unknown): string {
+  const filter = f as { c?: string; g?: Array<{ c?: string; r?: Array<{ p?: string; op?: string; v?: string }> }> };
+  if (!filter.g || filter.g.length === 0) return "(sin filtro)";
+  return filter.g
+    .map((g) =>
+      (g.r && g.r.length > 0)
+        ? `(${g.r.map((r) => `${r.p ?? "?"} ${r.op ?? "="} ${r.v ?? "?"}`).join(` ${g.c ?? "AND"} `)})`
+        : "()"
+    )
+    .join(` ${filter.c ?? "AND"} `);
+}
+
 function chunkMapeos(): Array<{
   id: string;
   corpus: "mapeos";
@@ -167,15 +179,28 @@ function chunkMapeos(): Array<{
   const data = mappingPresetsRaw as unknown as MappingPresets;
   const mappings = data.mappings ?? [];
   return mappings.map((m) => {
+    const resultsText = (m.results ?? []).map((r, i) => {
+      const lines = [
+        `  Resultado ${i + 1}: ${r.ifc_class} — pass ${r.pass} — confianza ${(r.conf * 100).toFixed(0)}%`,
+        r.analysis_class ? `  Clase análisis: ${r.analysis_class}` : null,
+        r.quantity_type ? `  Tipo cantidad: ${r.quantity_type}` : null,
+        r.target_mode ? `  Modo: ${r.target_mode}` : null,
+        r.canonical_concept ? `  Concepto canónico: ${r.canonical_concept}` : null,
+        r.rationale ? `  Razón: ${r.rationale}` : null,
+        `  Filtro: ${renderFilterForRag(r.filter)}`,
+        r.match_stats
+          ? `  Stats: ${r.match_stats.matched_elements} elementos (${(r.match_stats.match_share * 100).toFixed(0)}% del modelo) · ${r.match_stats.specificity_status}`
+          : null,
+      ];
+      return lines.filter(Boolean).join("\n");
+    });
     const top = m.results?.[0];
     const text = [
       `Sección ${m.section_id} — ${m.section_title}.`,
       m.unit ? `Unidad: ${m.unit}.` : null,
-      top
-        ? `Mejor mapeo: ${top.ifc_class} (confianza ${(top.conf * 100).toFixed(0)}%).`
-        : "Sin mapeo.",
-      top?.rationale ? `Razón: ${top.rationale}` : null,
       `Estado: ${m.status}.`,
+      `${m.results.length} resultado(s):`,
+      ...resultsText,
     ]
       .filter(Boolean)
       .join("\n");
@@ -187,6 +212,9 @@ function chunkMapeos(): Array<{
         section_id: m.section_id,
         section_title: m.section_title,
         ifc_class: top?.ifc_class ?? null,
+        pass: top?.pass ?? null,
+        status: m.status,
+        result_count: m.results.length,
       },
     };
   });

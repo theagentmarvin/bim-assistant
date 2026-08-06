@@ -22,8 +22,13 @@
    * the bottom got silently clipped — the cuantificación drawer
    * handle was below the fold with no way to scroll to it. min:0
    * caps the row at the 1fr allocation so internal panels handle
-   * their own overflow. */
-  grid-template-rows: auto auto minmax(0, 1fr);
+   * their own overflow.
+   *
+   * Boss 2026-08-05 19:20 — dropped one `auto` row. The AgentStatus
+   * row that used to live between the header and the body moved
+   * into the header (as a compact trigger pill); the body now
+   * starts immediately under the header. */
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   overflow: hidden; /* Boss 2026-08-05 09:35 — defensive. Even if a
                       descendant overflows (long chat bubble, agent
@@ -125,6 +130,21 @@
    * value is set inline via `style={{ width: '...px' }}`; the
    * transition runs on class change. */
   transition: width 240ms ease-out;
+  overflow: hidden;
+}
+
+/* Stage 1 (2026-08-05) — compound layout: MappedSidebar + PdfViewer
+ * side by side inside the spec column. */
+.specCompound {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.specPdfWrap {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 

@@ -1,0 +1,162 @@
+{
+  "prompts": [
+    {
+      "id": "no-table-cuantos-muros",
+      "text": "¿Cuántos muros hay en el modelo?",
+      "category": "conteo",
+      "priority": 100,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "no-table-muestrame-exteriores",
+      "text": "muéstrame los muros exteriores",
+      "category": "resaltar",
+      "priority": 95,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "no-table-seccion-siding",
+      "text": "abre la sección sobre siding",
+      "category": "spec",
+      "priority": 90,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "no-table-que-dice-spec",
+      "text": "¿qué dice la especificación sobre el siding?",
+      "category": "spec",
+      "priority": 88,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "cuantificar-ventanas-dimensiones",
+      "text": "Cuantifica las ventanas con su ancho, alto y material",
+      "category": "cuantificacion",
+      "priority": 80,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "listado-muros-material",
+      "text": "lista los muros con su material",
+      "category": "listado",
+      "priority": 78,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "listado-puertas-tipo",
+      "text": "lista las puertas con su tipo y material",
+      "category": "listado",
+      "priority": 76,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "agrupar-ventanas-tipo",
+      "text": "agrupa las ventanas por tipo y dime cuántas hay de cada una",
+      "category": "agrupamiento",
+      "priority": 74,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "cuantificar-muros-resistencia",
+      "text": "cuantifica los muros con su resistencia al fuego",
+      "category": "cuantificacion",
+      "priority": 70,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "tabla-por-planta",
+      "text": "dame una tabla de muros por planta",
+      "category": "agrupamiento",
+      "priority": 65,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "tabla-tipos-muro",
+      "text": "qué tipos de muro se usan más en el modelo",
+      "category": "agrupamiento",
+      "priority": 60,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "tabla-losas-volumen",
+      "text": "lista las losas con su volumen",
+      "category": "cuantificacion",
+      "priority": 55,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "tabla-cubiertas-area",
+      "text": "lista las cubiertas con su área",
+      "category": "cuantificacion",
+      "priority": 53,
+      "conditions": { "model_loaded": true }
+    },
+    {
+      "id": "refinar-exteriores",
+      "text": "Filtra solo los exteriores",
+      "category": "refinamiento",
+      "priority": 50,
+      "conditions": {
+        "table_active": true,
+        "has_available_property": "is_external"
+      }
+    },
+    {
+      "id": "refinar-interiores",
+      "text": "Filtra solo los interiores",
+      "category": "refinamiento",
+      "priority": 49,
+      "conditions": {
+        "table_active": true,
+        "has_available_property": "is_external"
+      }
+    },
+    {
+      "id": "refinar-agregar-material",
+      "text": "Agrega la columna de material",
+      "category": "refinamiento",
+      "priority": 48,
+      "conditions": {
+        "table_active": true,
+        "has_available_property": "material_name"
+      }
+    },
+    {
+      "id": "refinar-agregar-resistencia",
+      "text": "Agrega la columna de resistencia al fuego",
+      "category": "refinamiento",
+      "priority": 47,
+      "conditions": {
+        "table_active": true,
+        "has_available_property": "fire_rating"
+      }
+    },
+    {
+      "id": "refinar-resaltar-resultados",
+      "text": "Resáltame esos elementos en el visor",
+      "category": "resaltar",
+      "priority": 45,
+      "conditions": { "table_active": true }
+    },
+    {
+      "id": "spec-de-tabla",
+      "text": "¿Qué dice la especificación sobre estos elementos?",
+      "category": "spec",
+      "priority": 40,
+      "conditions": { "table_active": true }
+    },
+    {
+      "id": "limpiar-tabla",
+      "text": "Limpia la tabla actual",
+      "category": "utilidad",
+      "priority": 10,
+      "conditions": { "table_active": true }
+    },
+    {
+      "id": "ayuda",
+      "text": "¿qué puedes hacer?",
+      "category": "ayuda",
+      "priority": 5
+    }
+  ]
+}

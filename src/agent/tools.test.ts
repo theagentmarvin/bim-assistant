@@ -5,6 +5,7 @@ import {
   getScalarTopLevelKeys,
   buildTabla,
 } from "./tools";
+import { TOOL_SCHEMAS } from "./schema";
 
 /**
  * Unit tests for the column-resolution layer added by
@@ -65,6 +66,41 @@ const WALL_ROW: Record<string, unknown> = {
   material_name: "Hormigón",
   psets: { Pset_WallCommon: { IsExternal: true } },
 };
+
+// -----------------------------------------------------------------------
+// JSON-schema regression guard — Boss 2026-08-05 (fix #B1).
+// The `calcular` field on the `tabla` parameter is the only way the
+// LLM can request a TOTAL row. If anyone accidentally removes it
+// from the schema, every "suma total", "promedio", etc. silently
+// returns a table with no TOTAL row. This test fails loudly so the
+// regression is caught at `npm run test` instead of in production.
+// -----------------------------------------------------------------------
+describe("TOOL_SCHEMAS — calcular exposed on tabla (Boss fix #B1)", () => {
+  it("consultar_base_de_conocimiento.tabla.calcular is in the schema (array form)", () => {
+    const consultar = TOOL_SCHEMAS.find(
+      (s) => s.name === "consultar_base_de_conocimiento",
+    );
+    expect(consultar).toBeDefined();
+    const tabla = consultar!.parameters.properties.tabla;
+    expect(tabla).toBeDefined();
+    expect(tabla!.properties!.calcular).toBeDefined();
+    // Boss 2026-08-05 (fix #B1.b) — array form, one operation per
+    // item. Schema regression guard: if anyone flips this back to
+    // a single object, the LLM loses multi-column totals and Boss
+    // sees "veo cero totales" again.
+    const calc = tabla!.properties!.calcular!;
+    expect(calc.type).toBe("array");
+    expect(calc.items).toBeDefined();
+    expect(calc.items!.type).toBe("object");
+    expect(calc.items!.properties!.operacion!.enum).toEqual([
+      "suma",
+      "promedio",
+      "min",
+      "max",
+    ]);
+    expect(calc.items!.required).toEqual(["operacion", "columna"]);
+  });
+});
 
 // -----------------------------------------------------------------------
 // resolveColumnKey — flattened Qto aliases (Boss 2026-07-30)
@@ -264,14 +300,16 @@ describe("buildTabla — calcular_cantidades", () => {
     const tabla = buildTabla("modelo", {
       clase_ifc: "IfcWall",
       columnas: ["Nombre", "Volumen"],
-      calcular: { operacion: "suma", columna: "Volumen" },
+      // Boss 2026-08-05 (fix #B1.b) — `calcular` is now an array.
+      calcular: [{ operacion: "suma", columna: "Volumen" }],
     });
     expect(tabla).toBeDefined();
     expect(tabla!.totales).toBeDefined();
-    expect(tabla!.totales!.operacion).toBe("suma");
-    expect(tabla!.totales!.columna).toBe("Volumen");
-    expect(tabla!.totales!.unidad).toBe("m³");
-    expect(tabla!.totales!.valor).toBeGreaterThan(0);
+    expect(tabla!.totales).toHaveLength(1);
+    expect(tabla!.totales![0].operacion).toBe("suma");
+    expect(tabla!.totales![0].columna).toBe("Volumen");
+    expect(tabla!.totales![0].unidad).toBe("m³");
+    expect(tabla!.totales![0].valor).toBeGreaterThan(0);
     const lastRow = tabla!.filas[tabla!.filas.length - 1];
     expect(lastRow._tipo).toBe("total");
     expect(lastRow["Volumen"]).toContain("m³");
@@ -283,42 +321,42 @@ describe("buildTabla — calcular_cantidades", () => {
     const tabla = buildTabla("modelo", {
       clase_ifc: "IfcWall",
       columnas: ["Área"],
-      calcular: { operacion: "promedio", columna: "Área" },
+      calcular: [{ operacion: "promedio", columna: "Área" }],
     });
-    expect(tabla!.totales!.operacion).toBe("promedio");
-    expect(tabla!.totales!.columna).toBe("Área");
-    expect(tabla!.totales!.unidad).toBe("m²");
+    expect(tabla!.totales![0].operacion).toBe("promedio");
+    expect(tabla!.totales![0].columna).toBe("Área");
+    expect(tabla!.totales![0].unidad).toBe("m²");
   });
 
   it("min operation on Ancho for IfcWindow (unit: m)", () => {
     const tabla = buildTabla("modelo", {
       clase_ifc: "IfcWindow",
       columnas: ["Ancho"],
-      calcular: { operacion: "min", columna: "Ancho" },
+      calcular: [{ operacion: "min", columna: "Ancho" }],
     });
-    expect(tabla!.totales!.operacion).toBe("min");
-    expect(tabla!.totales!.unidad).toBe("m");
+    expect(tabla!.totales![0].operacion).toBe("min");
+    expect(tabla!.totales![0].unidad).toBe("m");
   });
 
   it("max operation on Alto for IfcWall (unit: m)", () => {
     const tabla = buildTabla("modelo", {
       clase_ifc: "IfcWall",
       columnas: ["Alto"],
-      calcular: { operacion: "max", columna: "Alto" },
+      calcular: [{ operacion: "max", columna: "Alto" }],
     });
-    expect(tabla!.totales!.operacion).toBe("max");
-    expect(tabla!.totales!.unidad).toBe("m");
+    expect(tabla!.totales![0].operacion).toBe("max");
+    expect(tabla!.totales![0].unidad).toBe("m");
   });
 
   it("TOTAL row string matches `${valor.toFixed(3)} ${unidad}`", () => {
     const tabla = buildTabla("modelo", {
       clase_ifc: "IfcWall",
       columnas: ["Volumen"],
-      calcular: { operacion: "suma", columna: "Volumen" },
+      calcular: [{ operacion: "suma", columna: "Volumen" }],
     });
     const lastRow = tabla!.filas[tabla!.filas.length - 1];
     const formatted = lastRow["Volumen"] as string;
-    const expected = `${tabla!.totales!.valor.toFixed(3)} ${tabla!.totales!.unidad}`;
+    const expected = `${tabla!.totales![0].valor.toFixed(3)} ${tabla!.totales![0].unidad}`;
     expect(formatted).toBe(expected);
   });
 
@@ -326,9 +364,15 @@ describe("buildTabla — calcular_cantidades", () => {
     const tabla = buildTabla("modelo", {
       clase_ifc: "IfcWall",
       columnas: ["Nombre"],
-      calcular: { operacion: "suma", columna: "Nombre" },
+      calcular: [{ operacion: "suma", columna: "Nombre" }],
     });
-    expect(tabla!.totales).toBeUndefined();
+    // Boss 2026-08-05 (fix #B1.b) — helper returns an empty array
+    // (not undefined) when no operations produced a value. The
+    // downstream consumers (loop.ts prose guard, buildTableContextPreamble)
+    // check `totales.length > 0` so this is equivalent to the old
+    // `undefined` contract. The TOTAL row absence is the user-
+    // visible property that matters.
+    expect(tabla!.totales).toEqual([]);
     const hasTotalRow = tabla!.filas.some((r) => r._tipo === "total");
     expect(hasTotalRow).toBe(false);
   });
@@ -337,7 +381,7 @@ describe("buildTabla — calcular_cantidades", () => {
     const tabla = buildTabla("modelo", {
       clase_ifc: "IfcWall",
       columnas: ["Volumen"],
-      calcular: { operacion: "suma", columna: "Volumen" },
+      calcular: [{ operacion: "suma", columna: "Volumen" }],
     });
     expect(tabla!.available_properties).toBeDefined();
     expect(tabla!.available_properties).not.toContain("_tipo");
@@ -350,8 +394,213 @@ describe("buildTabla — calcular_cantidades", () => {
     const tabla = buildTabla("modelo", {
       clase_ifc: "IfcWall",
       columnas: ["Volumen"],
-      calcular: { operacion: "suma", columna: "Volumen" },
+      calcular: [{ operacion: "suma", columna: "Volumen" }],
     });
-    expect(tabla!.totales!.unidad).toBe("m³");
+    expect(tabla!.totales![0].unidad).toBe("m³");
+  });
+
+  // Boss 2026-08-05 (fix #B1.b) — the original bug screenshot was
+  // a 3-column table (Area, Largo, Alto) with no totals. Single-row
+  // totals aren't enough now that users ask for sums across multiple
+  // columns. This test verifies the array form produces one TOTAL
+  // row per operation and the matching entries in `totales`.
+  it("emits one TOTAL row per operation (multi-column)", () => {
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre", "Largo", "Alto", "Area"],
+      calcular: [
+        { operacion: "suma", columna: "Largo" },
+        { operacion: "suma", columna: "Alto" },
+        { operacion: "suma", columna: "Area" },
+      ],
+    });
+    expect(tabla).toBeDefined();
+    expect(tabla!.totales).toHaveLength(3);
+    // Each entry has the right operacion + columna pairing.
+    expect(tabla!.totales!.map((t) => t.columna).sort()).toEqual(
+      ["Alto", "Area", "Largo"].sort(),
+    );
+    expect(tabla!.totales!.every((t) => t.operacion === "suma")).toBe(true);
+    // Three TOTAL rows at the bottom of filas, in spec order.
+    const totalRows = tabla!.filas.filter((r) => r._tipo === "total");
+    expect(totalRows).toHaveLength(3);
+    // Each TOTAL row has its target column populated and the others "—".
+    for (const t of tabla!.totales!) {
+      const matchingRow = totalRows.find((r) =>
+        String(r[t.columna] ?? "").includes(String(t.valor.toFixed(3))),
+      );
+      expect(matchingRow).toBeDefined();
+    }
+  });
+
+  it("skips operations on non-numeric columns (no fake-zero totals)", () => {
+    const tabla = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre", "Volumen"],
+      calcular: [
+        { operacion: "suma", columna: "Volumen" }, // valid
+        { operacion: "suma", columna: "Nombre" }, // skip (no numbers)
+      ],
+    });
+    expect(tabla!.totales).toHaveLength(1);
+    expect(tabla!.totales![0].columna).toBe("Volumen");
+  });
+});
+
+describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", () => {
+  // Each test rebuilds its own baseline so filter values are pulled
+  // from real cache rows (avoids dependency on hypothetical "Wall-1"
+  // fixtures that don't exist in bim_elements.json).
+
+  it("no_igual excludes rows with matching name", () => {
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    const target = String(baseline.filas[0]["Nombre"] ?? "");
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: { columna: "Nombre", valor: target, operador: "no_igual" },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    // No refined row should still match the target value.
+    expect(refined.filas.every((r) => r["Nombre"] !== target)).toBe(true);
+    // Refined rows = baseline minus the rows whose name matched target.
+    const baselineMatches = baseline.filas.filter(
+      (r) => r["Nombre"] === target,
+    ).length;
+    expect(refined.filas.length).toBe(baseline.filas.length - baselineMatches);
+  });
+
+  it("no_contiene excludes rows whose name contains the substring", () => {
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    // Pick a real substring of the first row's name (first 3 chars).
+    const target = String(baseline.filas[0]["Nombre"] ?? "").slice(0, 3);
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: {
+          columna: "Nombre",
+          valor: target,
+          operador: "no_contiene",
+        },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    expect(
+      refined.filas.every(
+        (r) =>
+          !String(r["Nombre"] ?? "").toLowerCase().includes(target.toLowerCase()),
+      ),
+    ).toBe(true);
+  });
+
+  it("no_mayor_que keeps values <= threshold; skips non-numeric cells", () => {
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Volumen"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    const firstV = baseline.filas[0]["Volumen"];
+    if (typeof firstV !== "number" || !Number.isFinite(firstV)) return;
+    const threshold = firstV;
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: {
+          columna: "Volumen",
+          valor: String(threshold),
+          operador: "no_mayor_que",
+        },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    refined.filas.forEach((r) => {
+      const v = Number(r["Volumen"]);
+      if (Number.isFinite(v)) {
+        expect(v).toBeLessThanOrEqual(threshold);
+      }
+    });
+  });
+
+  it("no_menor_que keeps values >= threshold; skips non-numeric cells", () => {
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Volumen"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    const firstV = baseline.filas[0]["Volumen"];
+    if (typeof firstV !== "number" || !Number.isFinite(firstV)) return;
+    const threshold = firstV;
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: {
+          columna: "Volumen",
+          valor: String(threshold),
+          operador: "no_menor_que",
+        },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    refined.filas.forEach((r) => {
+      const v = Number(r["Volumen"]);
+      if (Number.isFinite(v)) {
+        expect(v).toBeGreaterThanOrEqual(threshold);
+      }
+    });
+  });
+
+  it("default operador is 'igual' (backwards-compatible)", () => {
+    // Build baseline to pick a real name that's actually in the data.
+    const baseline = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      columnas: ["Nombre"],
+    });
+    expect(baseline).toBeDefined();
+    if (!baseline || baseline.filas.length === 0) return;
+    const target = String(baseline.filas[0]["Nombre"] ?? "");
+
+    const igualRows = buildTabla("modelo", {
+      refinar: { filtrar_por: { columna: "Nombre", valor: target } },
+    });
+    const negatedRows = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: {
+          columna: "Nombre",
+          valor: target,
+          operador: "no_igual",
+        },
+      },
+    });
+    expect(igualRows).toBeDefined();
+    expect(negatedRows).toBeDefined();
+    if (!igualRows || !negatedRows) return;
+
+    // igualRows ⊆ rows where Nombre === target.
+    expect(igualRows.filas.every((r) => r["Nombre"] === target)).toBe(true);
+    // negatedRows ⊆ rows where Nombre !== target.
+    expect(negatedRows.filas.every((r) => r["Nombre"] !== target)).toBe(true);
+    // Disjoint: no row name appears in both refinements.
+    const igualNames = new Set(igualRows.filas.map((r) => r["Nombre"]));
+    for (const r of negatedRows.filas) {
+      expect(igualNames.has(r["Nombre"])).toBe(false);
+    }
+    // Sum of refined row counts equals baseline count (no rows lost
+    // between igual + no_igual partitioning).
+    expect(igualRows.filas.length + negatedRows.filas.length).toBe(
+      baseline.filas.length,
+    );
   });
 });

@@ -36,7 +36,7 @@ const SAMPLE_TURN: TurnRecord = {
       text:
         "Encontré 22 muros exteriores en el modelo. Los resalté en el " +
         "visor 3D en color naranja." +
-        "\n\n— Salfa BIM Agent 01 · SZA_BDE3_ARQ_C1 · IFC 2x3 · 291 elementos",
+        "\n\n— BIM Agent · SZA_BDE3_ARQ_C1 · IFC 2x3 · 291 elementos",
     },
   ],
 };

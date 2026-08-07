@@ -24,11 +24,11 @@
   line-height: 1.1;
 }
 
-.brand {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ff-blue-active);
-  letter-spacing: 0.04em;
+.brandLogo {
+  height: 30px;
+  width: 30px;
+  object-fit: contain;
+  display: block;
 }
 
 .subtitle {
@@ -46,8 +46,8 @@
   background: transparent;
   border: 1px solid var(--ff-border);
   border-radius: var(--ff-radius-control);
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
   color: var(--ff-text-secondary);
   cursor: pointer;
   transition: background 150ms ease, color 150ms ease;
@@ -67,8 +67,8 @@
   background: transparent;
   border: 1px solid var(--ff-border);
   border-radius: var(--ff-radius-control);
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
   color: var(--ff-text-secondary);
   cursor: pointer;
 }

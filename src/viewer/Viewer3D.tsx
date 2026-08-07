@@ -57,8 +57,8 @@ const IFC_URL = "/SZA_BDE3_ARQ_C1.ifc";
 // we hit when the obsolete ghost-re-apply block was still firing inside
 // the onHighlight handler.)
 const SELECT_MAT: FRAGS.MaterialDefinition = {
-  color: new THREE.Color(0xff6a00),
-  opacity: 0.6,
+  color: new THREE.Color(0xb44e51),
+  opacity: 0.7,
   transparent: true,
   renderedFaces: FRAGS.RenderedFaces.TWO,
   preserveOriginalMaterial: true,
@@ -73,8 +73,8 @@ const SELECT_MAT: FRAGS.MaterialDefinition = {
 // takes precedence over custom" rule applies here. (TOE Highlighter
 // example.ts, "select overrides custom until deselected".)
 const FILTER_MAT: FRAGS.MaterialDefinition = {
-  color: new THREE.Color(0xffeb3b),
-  opacity: 0.35,
+  color: new THREE.Color(0xb44e51),
+  opacity: 0.45,
   transparent: true,
   renderedFaces: FRAGS.RenderedFaces.TWO,
   preserveOriginalMaterial: true,

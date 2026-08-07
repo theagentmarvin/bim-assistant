@@ -104,8 +104,7 @@ export default function ChatPanel({
     <div className={styles.panel}>
       <div className={styles.header}>
         <div className={styles.headerTitle}>
-          <span className={styles.brand}>Salfa BIM Agent 01</span>
-          <span className={styles.subtitle}>Asistente BIM</span>
+          <img className={styles.brandLogo} src="/logo-bim-agent.png" alt="BIM Agent" />
         </div>
         <div className={styles.headerActions}>
           <button
@@ -133,7 +132,7 @@ export default function ChatPanel({
           const list = contextualPrompts.length > 0 ? contextualPrompts : DEFAULT_EXAMPLES;
           return (
             <div className={styles.empty}>
-              <div className={styles.emptyTitle}>Pregúntale a Salfa BIM Agent 01</div>
+              <div className={styles.emptyTitle}>Pregúntale a BIM Agent</div>
               <ul className={styles.examples}>
                 {list.map((p) => (
                   <li key={p}>{p}</li>
@@ -161,10 +160,10 @@ export default function ChatPanel({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Pregúntale a Salfa BIM Agent 01…"
+          placeholder="Pregúntale a BIM Agent…"
           rows={3}
           disabled={busy}
-          aria-label="Mensaje para Salfa BIM Agent 01"
+          aria-label="Mensaje para BIM Agent"
         />
       </form>
     </div>
@@ -202,7 +201,7 @@ function MessageRow({ message }: { message: ChatMessage }) {
   return (
     <div className={`${styles.bubble} ${roleClass}`}>
       {message.role === "agent" && (
-        <div className={styles.agentTag}>Salfa BIM Agent 01</div>
+        <div className={styles.agentTag}>BIM Agent</div>
       )}
       <div className={styles.text}>{message.text}</div>
     </div>

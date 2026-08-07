@@ -20,12 +20,12 @@ import { timestampForFilename } from "./copy";
 // ----- Configuration: rules-engine footer stripping -----
 //
 // The `formatting-append-stats-footer` rule in question-rules.json
-// appends "— Salfa BIM Agent 01 · SZA_BDE3_ARQ_C1 · IFC 2x3 · 291
+// appends "— BIM Agent · SZA_BDE3_ARQ_C1 · IFC 2x3 · 291
 // elementos" to every agent reply. A 30-turn session export would
 // otherwise carry 30 identical footers. Strip them in the export
 // formatter — the footer is correct in the live chat (scannability)
 // but redundant in a markdown transcript.
-const FOOTER_REGEX = /\n\n— Salfa BIM Agent 01 · [^\n]+$/;
+const FOOTER_REGEX = /\n\n— BIM Agent · [^\n]+$/;
 
 function stripFooter(text: string | undefined): string | undefined {
   if (!text) return text;
@@ -143,7 +143,7 @@ export interface SessionMeta {
 
 function renderHeader(meta: SessionMeta): string {
   const out: string[] = [];
-  out.push("# Salfa BIM Agent 01 — Sesión de chat");
+  out.push("# BIM Agent — Sesión de chat");
   out.push("");
   out.push(`Exportado:  ${meta.exportedAt.toLocaleString()}`);
   out.push(`Tester:     ${meta.tester ?? "[rellenar]"}`);
@@ -186,7 +186,7 @@ export function formatSessionMarkdown(
 ): string {
   if (turns.length === 0) {
     return (
-      "# Salfa BIM Agent 01 — Sesión de chat\n\n" +
+      "# BIM Agent — Sesión de chat\n\n" +
       "Sesión vacía — no hay turnos para exportar.\n"
     );
   }
@@ -248,7 +248,7 @@ export function downloadMarkdown(filename: string, content: string): boolean {
  * 2026-08-05-2017.md.
  */
 export function sessionFilename(d: Date = new Date()): string {
-  return `salfa-bim-session-${timestampForFilename(d)}.md`;
+  return `bim-agent-session-${timestampForFilename(d)}.md`;
 }
 
 /**

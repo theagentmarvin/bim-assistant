@@ -464,7 +464,7 @@ describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", 
       refinar: {
         filtrar_por: { columna: "Nombre", valor: target, operador: "no_igual" },
       },
-    });
+    }, ["Nombre"]);
     expect(refined).toBeDefined();
     if (!refined) return;
     // No refined row should still match the target value.
@@ -493,7 +493,7 @@ describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", 
           operador: "no_contiene",
         },
       },
-    });
+    }, ["Nombre"]);
     expect(refined).toBeDefined();
     if (!refined) return;
     expect(
@@ -522,7 +522,7 @@ describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", 
           operador: "no_mayor_que",
         },
       },
-    });
+    }, ["Volumen"]);
     expect(refined).toBeDefined();
     if (!refined) return;
     refined.filas.forEach((r) => {
@@ -551,7 +551,7 @@ describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", 
           operador: "no_menor_que",
         },
       },
-    });
+    }, ["Volumen"]);
     expect(refined).toBeDefined();
     if (!refined) return;
     refined.filas.forEach((r) => {
@@ -574,7 +574,7 @@ describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", 
 
     const igualRows = buildTabla("modelo", {
       refinar: { filtrar_por: { columna: "Nombre", valor: target } },
-    });
+    }, ["Nombre"]);
     const negatedRows = buildTabla("modelo", {
       refinar: {
         filtrar_por: {
@@ -583,7 +583,7 @@ describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", 
           operador: "no_igual",
         },
       },
-    });
+    }, ["Nombre"]);
     expect(igualRows).toBeDefined();
     expect(negatedRows).toBeDefined();
     if (!igualRows || !negatedRows) return;
@@ -627,7 +627,7 @@ describe("buildTabla — grouped→refine transition (Boss 2026-08-07 R2 fix)", 
       refinar: {
         filtrar_por: { columna: "spatial_container", valor: level },
       },
-    });
+    }, ["spatial_container"]);
     expect(refined).toBeDefined();
     if (!refined) return;
     // The refinement dis-aggregates the grouped view into a flat listing

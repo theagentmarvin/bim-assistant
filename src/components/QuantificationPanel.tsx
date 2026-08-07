@@ -68,6 +68,14 @@ interface Props {
    *  The agent filter on the model is preserved so the chat context
    *  stays intact. Renders nothing when omitted. */
   onClear?: () => void;
+  /** Boss 2026-08-07 (SSOT Step 4/5) — user-added display columns.
+   *  Lifted from this panel's local state into App.tsx so the agent's
+   *  refinement (`displayColumns`) sees them and never drops them.
+   *  Controlled: the panel calls onAddColumn/onRemoveColumn instead
+   *  of mutating internal state. */
+  extraColumns?: string[];
+  onAddColumn?: (prop: string) => void;
+  onRemoveColumn?: (prop: string) => void;
 }
 
 type SortDir = "asc" | "desc" | null;
@@ -77,14 +85,17 @@ interface RowMeta {
   express_ids: number[];
 }
 
-export default function QuantificationPanel({ data, onRowSelect, selectedRowIndex, onClear }: Props) {
+export default function QuantificationPanel({ data, onRowSelect, selectedRowIndex, onClear, extraColumns = [], onAddColumn, onRemoveColumn }: Props) {
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
   const [copyHint, setCopyHint] = useState<string | null>(null);
   // Boss #14917: columns the user has added on top of the agent's
   // selection. Persisted across filter/sort (recomputed with rows).
-  const [extraColumns, setExtraColumns] = useState<string[]>([]);
+  // Boss 2026-08-07 (SSOT Step 4/5) — now CONTROLLED from App.tsx
+  // (userExtraColumns): the panel renders the prop and reports
+  // add/remove via callbacks, so the agent's refinement sees the
+  // full visible column set and never drops user extras.
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   // Boss #14917 (follow-up): per-column widths. Keyed by column name.
   // Missing or invalid keys fall back to DEFAULT_COL_WIDTH.
@@ -306,14 +317,16 @@ export default function QuantificationPanel({ data, onRowSelect, selectedRowInde
   };
 
   const addColumn = (prop: string) => {
-    if (!extraColumns.includes(prop)) {
-      setExtraColumns([...extraColumns, prop]);
+    // Boss 2026-08-07 (SSOT Step 4/5) — controlled from App.tsx.
+    if (onAddColumn && !extraColumns.includes(prop)) {
+      onAddColumn(prop);
     }
     setShowColumnMenu(false);
   };
 
   const removeExtraColumn = (prop: string) => {
-    setExtraColumns(extraColumns.filter((p) => p !== prop));
+    // Boss 2026-08-07 (SSOT Step 4/5) — controlled from App.tsx.
+    onRemoveColumn?.(prop);
     if (sortKey === prop) {
       setSortKey(null);
       setSortDir(null);

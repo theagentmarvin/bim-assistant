@@ -208,6 +208,14 @@ export default function App() {
   // auto-expand effect below drives the drawer.
   const [latestTable, setLatestTable] = useState<QuantificationTable | null>(null);
 
+  // Boss 2026-08-07 (SSOT Step 4/5) — user-added display columns,
+  // lifted from QuantificationPanel into App.tsx. This is the SSOT for
+  // user column intent: the panel renders `userExtraColumns` and calls
+  // onAddColumn/onRemoveColumn; the agent's refinement injects
+  // `[...latestTable.columnas, ...userExtraColumns]` as displayColumns
+  // so a refine narrows rows only and never drops user columns.
+  const [userExtraColumns, setUserExtraColumns] = useState<string[]>([]);
+
   // Boss 2026-07-30 17:48 — synchronize selection between the
   // cuantificación table and the 3D model.
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
@@ -252,6 +260,31 @@ export default function App() {
     } else {
       setDrawerState("open");
     }
+  }, [latestTable]);
+
+  // Boss 2026-08-07 — the 3D model MUST always mirror the rows the
+  // table is showing. Even if the agent doesn't call resaltar_elementos
+  // directly, whenever a (non-empty) table is displayed we derive a
+  // precise express_id filter from its filas_express_ids and apply it
+  // to the viewer, so only the tabiques currently listed are isolated.
+  // This closes the gap where "filtra la tabla" narrowed the table but
+  // left the model showing all elements.
+  useEffect(() => {
+    if (!latestTable) return;
+    const allIds = (latestTable.filas_express_ids ?? [])
+      .flat()
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    if (allIds.length === 0) return; // empty table — leave the viewer as-is
+    const mirrorFilter: Filter = {
+      c: "OR",
+      g: allIds.map((id) => ({
+        c: "AND",
+        r: [{ p: "express_id", op: "equals", v: String(id) }],
+      })),
+    };
+    setAgentFilter(mirrorFilter);
+    setAgentIfcClass(null);
+    setAgentMappingId(null);
   }, [latestTable]);
 
   // Rail click → spec column opens. The cuantificación drawer is
@@ -392,8 +425,17 @@ export default function App() {
   }, []);
 
   const toolContext: ToolContext = useMemo(
-    () => ({ resaltar, abrirPdf }),
-    [resaltar, abrirPdf],
+    () => ({
+      resaltar,
+      abrirPdf,
+      // Boss 2026-08-07 (SSOT Step 5) — carry the current visible
+      // column set (agent base + user extras) so a refinement narrows
+      // rows only, never dropping user-added columns.
+      displayColumns: latestTable
+        ? [...latestTable.columnas, ...userExtraColumns]
+        : undefined,
+    }),
+    [resaltar, abrirPdf, latestTable, userExtraColumns],
   );
 
   // ----- Row click in Cuantificación drawer → user selection highlight -----
@@ -515,6 +557,11 @@ export default function App() {
           if (result.ok && result.tool === "consultar_base_de_conocimiento") {
             const t = result.result.tabla;
             if (t) {
+              // Boss 2026-08-07 (SSOT Step 5) — column preservation now
+              // lives in the TOOL via displayColumns (ToolContext):
+              // refinarTabla carries the on-screen columns forward and
+              // narrows rows only. No need to re-merge columns here —
+              // that was the old band-aid. Just lift the table.
               setLatestTable(t);
             }
             // Stage 1 Improvement 1 — extract agent-driven sidebar filter.
@@ -899,6 +946,13 @@ export default function App() {
             onUserCollapse={handleUserCollapsed}
             pulseCounter={pulseCounter}
             onClear={handleClearTable}
+            extraColumns={userExtraColumns}
+            onAddColumn={(prop) =>
+              setUserExtraColumns((prev) => (prev.includes(prop) ? prev : [...prev, prop]))
+            }
+            onRemoveColumn={(prop) =>
+              setUserExtraColumns((prev) => prev.filter((p) => p !== prop))
+            }
           />
         </section>
       </main>

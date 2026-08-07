@@ -105,6 +105,13 @@ export interface AbrirPdfCallback {
 export interface ToolContext {
   resaltar: ResaltarCallback;
   abrirPdf: AbrirPdfCallback;
+  /** Boss 2026-08-07 (SSOT Step 5) — the current visible column set
+   *  (agent base columns + user-added extras), injected by App.tsx.
+   *  `consultar_base_de_conocimiento` threads it into buildTabla so a
+   *  refinement narrows rows only and never drops the columns the
+   *  user sees. Not LLM-decided — it lives here, on the App-owned
+   *  context, so the ConsultarArgs schema stays pure. */
+  displayColumns?: string[];
 }
 
 // ----- Tool implementations -----
@@ -655,8 +662,6 @@ function detectEmptyColumns(
 let lastTablaCache: {
   rows: Array<Record<string, unknown>>;
   express_ids: number[][];
-  columnas: string[];
-  available_properties: string[];
   clase_ifc?: string;
 } | null = null;
 
@@ -689,8 +694,30 @@ function refinarTabla(
   cache: NonNullable<typeof lastTablaCache>,
   refinar: RefinarSpec,
   spec: TablaSpec,
+  // Boss 2026-08-07 (proper Fix 1 / SSOT) — the FULL currently
+  // displayed column set (agent's base columns + any the user added
+  // via "+ Agregar columna"). The refinement must narrow ROWS only;
+  // columns are carried forward from what's on screen, then adjusted
+  // by the refinement's agregar/quitar ops. Without this, user-added
+  // columns (which live in UI state, not the tool cache) would be
+  // dropped every time the agent refines — the Bug 1 class.
+  displayColumns?: string[],
 ): QuantificationTable | undefined {
-  let { rows, express_ids, columnas } = cache;
+  let { rows, express_ids } = cache;
+  // Boss 2026-08-07 (proper Fix 1 / SSOT) — the refinement should
+  // narrow ROWS only, carrying the currently displayed columns
+  // forward. Preview order:
+  //   1. displayColumns (agent base + user extras, from the UI)
+  //   2. spec.columnas (the agent's columns for a fresh refine)
+  // The refinement never derives columns from raw row keys — that
+  // silently mislabels Spanish display names (e.g. 'name' vs
+  // 'Nombre'), which broke the refinement contract. If no columns
+  // are supplied at all, the agent-specified columnas are the
+  // authority (they are required on a fresh build).
+  let columnas: string[] =
+    displayColumns && displayColumns.length > 0
+      ? displayColumns.slice()
+      : (spec.columnas ?? []).slice();
   // Boss 2026-08-05 (R2.5 bug fix) — raw BIM rows carry flat keys
   // like "Qto_WallBaseQuantities.GrossVolume" / "name", not the
   // Spanish labels the LLM sends ("Volumen", "Nombre"). Resolve
@@ -847,6 +874,12 @@ function compareRefinementCell(a: unknown, b: unknown): number {
 export function buildTabla(
   fuente: "modelo" | "especificacion" | "mapeos",
   spec: TablaSpec,
+  // Boss 2026-08-07 (proper Fix 1 / SSOT) — the current visible
+  // column set carried from the UI (agent base + user extras). Only
+  // used on the refinement path so a refine narrows rows only and
+  // never drops the columns the user sees. Null/undefined → the
+  // refinement falls back to the agent-specified columnas.
+  displayColumns?: string[],
 ): QuantificationTable | undefined {
   if (fuente !== "modelo") return undefined;
   // Boss 2026-08-05 (R2: incremental refinement) — refinement path.
@@ -856,7 +889,14 @@ export function buildTabla(
   // class context from the cache). On cache miss we fall through to
   // the safeguard below so the chat response becomes prose only.
   if (spec.refinar && lastTablaCache) {
-    const refined = refinarTabla(lastTablaCache, spec.refinar, spec);
+    const refined = refinarTabla(
+      lastTablaCache,
+      spec.refinar,
+      spec,
+      // Boss 2026-08-07 (proper Fix 1 / SSOT) — carry the current
+      // visible columns into the refinement so it narrows rows only.
+      displayColumns,
+    );
     if (refined) return refined;
   }
   // Boss #14905 safeguard: refuse to build a table with neither a
@@ -914,14 +954,12 @@ export function buildTabla(
     // refinement spec, hits the #14905 safeguard and clears the table).
     // We store the RAW per-element rows + per-element express_ids, NOT
     // the aggregated filas — a refinement then dis-aggregates the
-    // grouped view into a flat filtered listing. The `columnas`
-    // defaults to the grouping keys + Cantidad, so an un-grouped
-    // refinement yields a sensible listing.
+    // grouped view into a flat filtered listing. (SSOT refactor
+    // 2026-08-07: `columnas` is NOT cached — it's derived per-call
+    // from the display columns + refinement ops.)
     lastTablaCache = {
       rows,
       express_ids: filas_express_ids,
-      columnas: groupingKeys,
-      available_properties: computeAvailableProperties(filas, groupingKeys),
       clase_ifc: spec.clase_ifc,
     };
     return {
@@ -975,8 +1013,6 @@ export function buildTabla(
   lastTablaCache = {
     rows,
     express_ids: filas_express_ids,
-    columnas: validColumns,
-    available_properties: cachedAvailableProperties,
     clase_ifc: spec.clase_ifc,
   };
 
@@ -1040,7 +1076,11 @@ function filtraMapeos(spec: FiltrarMapeosSpec | undefined): string[] | undefined
 
 export async function toolConsultarBaseDeConocimiento(
   args: ConsultarArgs,
-  ctx: ToolContext,
+  // Boss 2026-08-07 (SSOT refactor) — `ctx` is retained in the
+  // signature for interface stability, but the tool no longer
+  // touches the viewer: the table→viewer mirror lives in App.tsx
+  // as a derivation of latestTable. The tool returns pure data.
+  _ctx: ToolContext,
   signal?: AbortSignal,
 ): Promise<ConsultarResult> {
   const fuente = args.fuente ?? "auto";
@@ -1068,7 +1108,9 @@ export async function toolConsultarBaseDeConocimiento(
   // from bim_elements.json (locked to the `modelo` corpus).
   const resolvedFuente: "modelo" | "especificacion" | "mapeos" =
     fuente === "auto" ? "modelo" : fuente;
-  const tabla = args.tabla ? buildTabla(resolvedFuente, args.tabla) : undefined;
+  const tabla = args.tabla
+    ? buildTabla(resolvedFuente, args.tabla, _ctx.displayColumns)
+    : undefined;
   // Boss 2026-07-30 18:13 — detect columns that have no data for the
   // requested class (e.g., "largo" for IfcWindow — length_m is null
   // in the extract). The agent uses these warnings to suggest
@@ -1087,54 +1129,21 @@ export async function toolConsultarBaseDeConocimiento(
     }
   }
   // Boss 2026-08-05 (R2.5 follow-up) — auto-mirror table → viewer.
-  // Every fresh and refined table mirrors to the 3D viewer so the
-  // JARVIS experience keeps table and model in sync, removing the
-  // old decoupled-bundle failure mode where the LLM had to remember
-  // a separate `resaltar_elementos` call.
   //
-  // Boss 2026-08-07 (honest-reporting hard requirement) — an empty
-  // result is NOT the same as "user asked for a reset". Empty table
-  // (0 filas) or empty id set must NEVER reset the viewer; the prior
-  // highlight is preserved and a warning is emitted so the LLM
-  // reports the empty result honestly and suggests alternatives.
-  if (tabla?.filas_express_ids) {
-    const allIds = tabla.filas_express_ids
-      .flat()
-      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
-    if (allIds.length > 0) {
-      const mirrorFilter: Filter = {
-        c: "OR",
-        g: allIds.map((id) => ({
-          c: "AND",
-          r: [{ p: "express_id", op: "equals", v: String(id) }],
-        })),
-      };
-      try {
-        ctx.resaltar({ filtro: mirrorFilter });
-      } catch (mirrorErr) {
-        // Best-effort — never fail the table call on a viewer-side
-        // issue.
-        // eslint-disable-next-line no-console
-        console.warn("table→viewer mirror failed", mirrorErr);
-      }
-    } else {
-      // Boss 2026-08-07 — do NOT reset the viewer on an empty table.
-      // Preserve the prior highlight. The user didn't ask for a
-      // reset; the auto-mirror must not erase model state just
-      // because a filter matched zero rows. A warning below tells
-      // the LLM to report the empty result honestly.
-      if (tabla.filas.length === 0) {
-        warnings.push(
-          "La tabla está vacía — el filtro no encontró elementos coincidentes. " +
-            "El visor 3D mantiene el resaltado anterior. Informa al usuario " +
-            "explícitamente y sugiere valores alternativos de las propiedades " +
-            "disponibles. NUNCA afirmes que la operación fue exitosa.",
-        );
-      }
-    }
-  } else if (tabla && tabla.filas.length === 0) {
-    // Boss 2026-08-07 — a table with 0 filas but no id projection
-    // still warrants an honest-empty warning on the prose path.
+  // Boss 2026-08-07 (SSOT refactor) — the viewer mirror moved OUT of
+  // the tool layer entirely. App.tsx derives the express-id filter
+  // from latestTable via a useEffect/useMemo and applies it to the
+  // 3D model there (single source of truth). Keeping a second mirror
+  // here would double-fire setAgentFilter on every table call and
+  // couple a pure data function to the viewer. The tool now returns
+  // pure data only; the orchestrator decides what to do with it.
+  //
+  // All that remains in the tool is the HONEST-REPORTING guard:
+  // an empty table must surface a warning so the LLM tells the
+  // user it found nothing, and never claims success.
+  if (tabla && tabla.filas.length === 0) {
+    // Boss 2026-08-07 — a table with 0 filas warrants an
+    // honest-empty warning on the prose path (and empty id set).
     warnings.push(
       "La tabla se generó sin filas — el filtro aplicado no encontró " +
         "elementos coincidentes. Informa al usuario explícitamente y " +

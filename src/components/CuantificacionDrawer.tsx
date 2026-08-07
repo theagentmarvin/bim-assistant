@@ -48,6 +48,11 @@ interface Props {
   /** Called when the user clicks the × button in the table header.
    *  Resets the table, the row selection, and the viewer highlight. */
   onClear?: () => void;
+  /** Boss 2026-08-07 (SSOT Step 4/5) — user-added display columns,
+   *  controlled from App.tsx. Forwarded to QuantificationPanel. */
+  extraColumns?: string[];
+  onAddColumn?: (prop: string) => void;
+  onRemoveColumn?: (prop: string) => void;
 }
 
 export default function CuantificacionDrawer({
@@ -59,6 +64,9 @@ export default function CuantificacionDrawer({
   onUserCollapse,
   pulseCounter,
   onClear,
+  extraColumns,
+  onAddColumn,
+  onRemoveColumn,
 }: Props) {
   const [viewportHeight, setViewportHeight] = useState<number>(
     typeof window !== "undefined" ? window.innerHeight : 800,
@@ -188,6 +196,9 @@ export default function CuantificacionDrawer({
             onRowSelect={onRowSelect}
             selectedRowIndex={selectedRowIndex}
             onClear={onClear}
+            extraColumns={extraColumns}
+            onAddColumn={onAddColumn}
+            onRemoveColumn={onRemoveColumn}
           />
         </div>
       )}

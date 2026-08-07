@@ -604,3 +604,68 @@ describe("buildTabla — refinement negation operators (Boss 2026-08-05 R2.5)", 
     );
   });
 });
+
+describe("buildTabla — grouped→refine transition (Boss 2026-08-07 R2 fix)", () => {
+  it("refining a grouped table returns a filtered listing (cache populated on grouping path)", () => {
+    // Build a grouped table (e.g. tabiques grouped by spatial_container)
+    // — this is the path that previously returned WITHOUT populating
+    // lastTablaCache, so a follow-up refine would fall through to the
+    // #14905 safeguard and clear the table.
+    const grouped = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      agrupar_por: ["spatial_container"],
+    });
+    expect(grouped).toBeDefined();
+    if (!grouped || grouped.filas.length === 0) return;
+    // Pick a real spatial_container value from the grouped rows.
+    const level = String(grouped.filas[0]["spatial_container"] ?? "");
+    expect(level.length).toBeGreaterThan(0);
+
+    // Follow-up refine: keep only rows on that level. THIS is the call
+    // that used to clear the table because the grouped path had no cache.
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: { columna: "spatial_container", valor: level },
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    // The refinement dis-aggregates the grouped view into a flat listing
+    // narrowed to the requested level — it must NOT be empty.
+    expect(refined.filas.length).toBeGreaterThan(0);
+    // Every row should sit on the requested level.
+    expect(
+      refined.filas.every((r) => r["spatial_container"] === level),
+    ).toBe(true);
+    // Total filtered row count must equal the grouped bucket count for
+    // that level (a filter never invents rows).
+    const bucketCount = grouped.filas.reduce((acc, r) => {
+      return String(r["spatial_container"] ?? "") === level
+        ? acc + Number(r["Cantidad"] ?? 0)
+        : acc;
+    }, 0);
+    expect(refined.filas.length).toBe(bucketCount);
+  });
+
+  it("refine-after-add-column still works on the grouped-path cache", () => {
+    const grouped = buildTabla("modelo", {
+      clase_ifc: "IfcWall",
+      agrupar_por: ["spatial_container"],
+    });
+    expect(grouped).toBeDefined();
+    if (!grouped || grouped.filas.length === 0) return;
+    const level = String(grouped.filas[0]["spatial_container"] ?? "");
+
+    const refined = buildTabla("modelo", {
+      refinar: {
+        filtrar_por: { columna: "spatial_container", valor: level },
+        agregar_columnas: ["Nombre"],
+      },
+    });
+    expect(refined).toBeDefined();
+    if (!refined) return;
+    expect(refined.filas.length).toBeGreaterThan(0);
+    // Adding a column to the grouped-path cache carries the refined rows.
+    expect(refined.columnas).toContain("Nombre");
+  });
+});

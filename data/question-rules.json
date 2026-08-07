@@ -87,11 +87,44 @@
       "id": "post-tool-warn-empty-table",
       "hook": "post-tool-call-validator",
       "priority": 78,
-      "description": "If consultar_base_de_conocimiento returns no tabla (presumably because the LLM forgot clase_ifc), inject a hint so the next turn reddens the agent.",
+      "description": "If consultar_base_de_conocimiento returns no tabla (presumably because the LLM forgot clase_ifc), inject a hint so the next turn reddens the agent. Matches BOTH null and absent (undefined, which JSON omits) — Boss 2026-08-07.",
       "rule": {
         "tool_name": "consultar_base_de_conocimiento",
         "condition": { "result.tabla": null },
         "inject_warning": "[Hook — tabla vacía] El tool no devolvió tabla. Probablemente falta clase_ifc o agrupar_por, o columnas resolubles. Considera pedir al usuario que especifique qué tipo de elemento busca."
+      }
+    },
+    {
+      "id": "post-tool-warn-zero-row-table",
+      "hook": "post-tool-call-validator",
+      "priority": 79,
+      "description": "Boss 2026-08-07 — when consultar_base_de_conocimiento returns a table with 0 filas (a filter matched zero rows), the LLM MUST tell the user honestly and suggest real alternatives — never claim success on an empty result.",
+      "rule": {
+        "tool_name": "consultar_base_de_conocimiento",
+        "condition": { "result.tabla.filas": [] },
+        "inject_warning": "[Hook — tabla con 0 filas] La tabla se generó pero no contiene filas. El filtro aplicado no encontró elementos coincidentes. INFORMA al usuario explícitamente: 'El filtro no encontró elementos para ese criterio. Los valores disponibles para esta propiedad son: [listalos]. ¿Quieres intentar con otro valor?' NUNCA des la impresión de que la operación fue exitosa."
+      }
+    },
+    {
+      "id": "pre-prompt-honest-empty-report",
+      "hook": "pre-prompt-augmentation",
+      "priority": 87,
+      "description": "Boss 2026-08-07 — when the user asks to filter/refine, inject a runtime reminder that the LLM must report honestly if zero rows match and suggest alternatives from the real available values.",
+      "rule": {
+        "trigger_pattern": "\\b(filtra|filtrar|refina|refinar|solo|solamente|dejar\\s+solo|muestra\\s+solo|quedate\\s+con|deja\\s+solo)\b",
+        "augmentation_text": "[Regla runtime — Boss 2026-08-07 honestidad] El usuario pidió filtrar o refinar. Si el filtro no encuentra coincidencias, DEBES informarlo claramente y sugerir alternativas concretas de los valores reales disponibles (por ejemplo las elevaciones de nivel reales del modelo). NO finjas éxito ni digas que la operación se completó si la tabla o el visor quedaron vacíos.",
+        "cooldown_turns": 1
+      }
+    },
+    {
+      "id": "pre-prompt-level-alias-discovery",
+      "hook": "pre-prompt-augmentation",
+      "priority": 86,
+      "description": "Boss 2026-08-07 — when the user refers to a floor by ordinal (primer/segundo nivel, piso, planta), teach the LLM that this model uses NPT elevations (e.g. 'NPT ±0.00', 'NPT +2.565'), not 'primer nivel' strings. The LLM should discover the actual spatial_container values before filtering instead of inventing a key.",
+      "rule": {
+        "trigger_pattern": "\\b(primer|primeros|segundo|tercer|cuarto|quinto|piso|planta|nivel)\b",
+        "augmentation_text": "[Regla runtime — niveles por elevación NPT] Este modelo NO armacena niveles como 'primer nivel' — los ubica por elevación NPT en el campo spatial_container (ej: 'NPT ±0.00', 'NPT +2.565', 'NPT -0.02'). Antes de filtrar por nivel, consulta los valores reales de spatial_container y usa ese valor exacto en refinar.filtrar_por. Si no hay un mapeo claro a 'primer nivel', informa al usuario y ofrece la lista de niveles reales.",
+        "cooldown_turns": 2
       }
     },
     {

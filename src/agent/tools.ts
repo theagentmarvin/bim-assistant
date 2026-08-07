@@ -907,6 +907,23 @@ export function buildTabla(
       filas_express_ids.push(bucket.ids);
     }
     filas.sort((a, b) => Number(b["Cantidad"]) - Number(a["Cantidad"]));
+    // Boss 2026-08-07 (R2 fix) — populate the refinement cache in the
+    // grouping path too, so a follow-up `refinar` can narrow the rows
+    // behind the grouped table instead of falling through to a full
+    // rebuild (which, with no clase_ifc/agrupar_por in the LLM's
+    // refinement spec, hits the #14905 safeguard and clears the table).
+    // We store the RAW per-element rows + per-element express_ids, NOT
+    // the aggregated filas — a refinement then dis-aggregates the
+    // grouped view into a flat filtered listing. The `columnas`
+    // defaults to the grouping keys + Cantidad, so an un-grouped
+    // refinement yields a sensible listing.
+    lastTablaCache = {
+      rows,
+      express_ids: filas_express_ids,
+      columnas: groupingKeys,
+      available_properties: computeAvailableProperties(filas, groupingKeys),
+      clase_ifc: spec.clase_ifc,
+    };
     return {
       titulo: spec.titulo ?? defaultTitulo(spec, filas.length),
       columnas: groupingKeys,
@@ -948,8 +965,9 @@ export function buildTabla(
   // call with `refinar` can operate on this row set without
   // re-querying bim_elements.json. The cache stores raw elements
   // (not projected filas), so the TOTAL row never enters the cache
-  // and refinements always re-project cleanly. Grouping path does
-  // NOT touch the cache (aggregation isn't refinement-eligible).
+  // and refinements always re-project cleanly. Since 2026-08-07 the
+  // grouping path above ALSO populates the cache (grouped → listing
+  // transition); this listing path remains the ungrouped source.
   const cachedAvailableProperties = computeAvailableProperties(
     filas,
     validColumns,
@@ -1051,13 +1069,34 @@ export async function toolConsultarBaseDeConocimiento(
   const resolvedFuente: "modelo" | "especificacion" | "mapeos" =
     fuente === "auto" ? "modelo" : fuente;
   const tabla = args.tabla ? buildTabla(resolvedFuente, args.tabla) : undefined;
+  // Boss 2026-07-30 18:13 — detect columns that have no data for the
+  // requested class (e.g., "largo" for IfcWindow — length_m is null
+  // in the extract). The agent uses these warnings to suggest
+  // alternatives from available_properties.
+  //
+  // Declared before the viewer-mirror block below: Boss 2026-08-07
+  // adds empty-table warnings here too, after the build.
+  const warnings: string[] = [];
+  if (tabla) {
+    const emptyCols = detectEmptyColumns(tabla.filas, tabla.columnas);
+    for (const col of emptyCols) {
+      warnings.push(
+        `La columna "${col}" no tiene datos para la clase solicitada. ` +
+        `Sugiere al usuario columnas alternativas del campo available_properties.`,
+      );
+    }
+  }
   // Boss 2026-08-05 (R2.5 follow-up) — auto-mirror table → viewer.
   // Every fresh and refined table mirrors to the 3D viewer so the
   // JARVIS experience keeps table and model in sync, removing the
   // old decoupled-bundle failure mode where the LLM had to remember
-  // a separate `resaltar_elementos` call. Empty refined set → reset
-  // the existing highlight (don't leave stale highlights on a
-  // refinement that empties the table).
+  // a separate `resaltar_elementos` call.
+  //
+  // Boss 2026-08-07 (honest-reporting hard requirement) — an empty
+  // result is NOT the same as "user asked for a reset". Empty table
+  // (0 filas) or empty id set must NEVER reset the viewer; the prior
+  // highlight is preserved and a warning is emitted so the LLM
+  // reports the empty result honestly and suggests alternatives.
   if (tabla?.filas_express_ids) {
     const allIds = tabla.filas_express_ids
       .flat()
@@ -1079,13 +1118,28 @@ export async function toolConsultarBaseDeConocimiento(
         console.warn("table→viewer mirror failed", mirrorErr);
       }
     } else {
-      try {
-        ctx.resaltar({ reset: true });
-      } catch (mirrorErr) {
-        // eslint-disable-next-line no-console
-        console.warn("viewer reset on empty refinement failed", mirrorErr);
+      // Boss 2026-08-07 — do NOT reset the viewer on an empty table.
+      // Preserve the prior highlight. The user didn't ask for a
+      // reset; the auto-mirror must not erase model state just
+      // because a filter matched zero rows. A warning below tells
+      // the LLM to report the empty result honestly.
+      if (tabla.filas.length === 0) {
+        warnings.push(
+          "La tabla está vacía — el filtro no encontró elementos coincidentes. " +
+            "El visor 3D mantiene el resaltado anterior. Informa al usuario " +
+            "explícitamente y sugiere valores alternativos de las propiedades " +
+            "disponibles. NUNCA afirmes que la operación fue exitosa.",
+        );
       }
     }
+  } else if (tabla && tabla.filas.length === 0) {
+    // Boss 2026-08-07 — a table with 0 filas but no id projection
+    // still warrants an honest-empty warning on the prose path.
+    warnings.push(
+      "La tabla se generó sin filas — el filtro aplicado no encontró " +
+        "elementos coincidentes. Informa al usuario explícitamente y " +
+        "sugiere valores alternativos. NUNCA afirmes que la operación fue exitosa.",
+    );
   }
   // Stage 1 Improvement 1 — agent-driven sidebar filtering.
   // Filter mapping_presets.json in-memory and return matching
@@ -1093,20 +1147,6 @@ export async function toolConsultarBaseDeConocimiento(
   // the result and passes it to MappedSidebar.agentFilterIds.
   const tarjetas_visibles = filtraMapeos(args.filtrar_mapeos);
 
-  // Boss 2026-07-30 18:13 — detect columns that have no data for the
-  // requested class (e.g., "largo" for IfcWindow — length_m is null
-  // in the extract). The agent uses these warnings to suggest
-  // alternatives from available_properties.
-  const warnings: string[] = [];
-  if (tabla) {
-    const emptyCols = detectEmptyColumns(tabla.filas, tabla.columnas);
-    for (const col of emptyCols) {
-      warnings.push(
-        `La columna "${col}" no tiene datos para la clase solicitada. ` +
-        `Sugiere al usuario columnas alternativas del campo available_properties.`,
-      );
-    }
-  }
   return {
     respuesta:
       respuesta || "No se encontraron fragmentos relevantes para esta pregunta.",
